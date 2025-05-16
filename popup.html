@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FB Marketplace Scraper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>FB Marketplace Scraper</h1>
+    <p>Click the button below or use <code>Ctrl+Shift+S</code> to capture the current listing.</p>
+    
+    <button id="captureBtn">Capture Listing</button>
+    
+    <div id="status" class="hidden">
+      <div class="spinner"></div>
+      <p id="statusText">Processing...</p>
+    </div>
+    
+    <div id="result" class="hidden">
+      <p id="resultText"></p>
+      <button id="openFileBtn">Open Excel File</button>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

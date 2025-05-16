@@ -1,11 +1,20 @@
 {
   "manifest_version": 3,
-  "name": "NS Marketplace Vehicle Capture",
+  "name": "Facebook Marketplace Scraper",
   "version": "1.0",
-  "description": "Capture Facebook Marketplace vehicle listings data for tax assessment purposes",
-  "permissions": ["activeTab", "storage", "downloads", "scripting"],
+  "description": "Scrape and save Facebook Marketplace listings to Excel",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "downloads",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.facebook.com/*"
+  ],
   "action": {
-    "default_popup": "popup/popup.html",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -13,23 +22,25 @@
     }
   },
   "background": {
-    "service_worker": "scripts/background.js"
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.facebook.com/marketplace/item/*"],
-      "js": ["scripts/content.js"]
+      "matches": ["https://*.facebook.com/marketplace/*"],
+      "js": ["content.js"]
     }
   ],
+  "commands": {
+    "capture-listing": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S"
+      },
+      "description": "Capture the current marketplace listing"
+    }
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["lib/*"],
-      "matches": ["*://*.facebook.com/*"]
-    }
-  ]
+  }
 }
