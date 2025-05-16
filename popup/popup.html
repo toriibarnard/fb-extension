@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NS Marketplace Vehicle Capture</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Marketplace Capture</h1>
+    <p>Click the button below to capture the current vehicle listing.</p>
+    <button id="captureBtn">Capture Listing</button>
+    <div id="status"></div>
+    <p class="tip">Keyboard shortcut: <kbd>Alt+C</kbd></p>
+    
+    <div class="divider"></div>
+    
+    <div class="options">
+      <h2>Options</h2>
+      <div class="option-row">
+        <label for="saveLocation">Save screenshots to:</label>
+        <input type="text" id="saveLocation" value="screenshots">
+      </div>
+      <div class="option-row checkbox">
+        <input type="checkbox" id="bundleZip" checked>
+        <label for="bundleZip">Bundle as .zip file</label>
+      </div>
+      <button id="saveOptions">Save Options</button>
+      <div id="optionsStatus"></div>
+    </div>
+    
+    <div class="footer">
+      <p>Nova Scotia Tax Commission Vehicle Assessment Tool</p>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
