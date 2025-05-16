@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Facebook Marketplace Scraper",
   "version": "1.0",
-  "description": "Scrape and save Facebook Marketplace listings to Excel",
+  "description": "Scrape and save Facebook Marketplace listings to CSV",
   "permissions": [
     "activeTab",
     "scripting",
@@ -22,12 +22,14 @@
     }
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "content_scripts": [
     {
       "matches": ["https://*.facebook.com/marketplace/*"],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "run_at": "document_idle"
     }
   ],
   "commands": {

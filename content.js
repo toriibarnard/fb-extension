@@ -1,14 +1,19 @@
 // Listen for messages from the popup or background script
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  console.log("Content script received message:", request);
+  
   if (request.action === "captureScreenshot") {
     // We'll just return success - actual screenshot is taken by the background script
+    console.log("Screenshot request received in content script");
     sendResponse({success: true, screenshot: "pending"});
     return true;
   }
   
   if (request.action === "scrapeData") {
     try {
+      console.log("Scraping data...");
       const listingData = scrapeListingData();
+      console.log("Scraped data:", listingData);
       sendResponse(listingData);
     } catch (error) {
       console.error("Error scraping data:", error);
@@ -29,44 +34,137 @@ document.addEventListener('keydown', function(event) {
 // Function to scrape listing data
 function scrapeListingData() {
   const url = window.location.href;
-  
-  // Extract title
   let title = "";
-  const titleElement = document.querySelector('[data-testid="marketplace_pdp_title"]');
-  if (titleElement) {
-    title = titleElement.textContent.trim();
-  }
-  
-  // Extract price
   let price = "";
-  const priceElement = document.querySelector('[data-testid="marketplace_pdp_price"]');
-  if (priceElement) {
-    price = priceElement.textContent.trim();
-  }
-  
-  // Extract location
   let location = "";
-  const locationElement = document.querySelector('[data-testid="marketplace_pdp_location"]');
-  if (locationElement) {
-    location = locationElement.textContent.trim();
-  }
-  
-  // Extract date posted - this is trickier as Facebook doesn't have a consistent selector
   let datePosted = "";
-  const possibleDateElements = document.querySelectorAll('span');
-  for (const element of possibleDateElements) {
-    const text = element.textContent.trim();
-    if (text.includes('Posted') || text.match(/\\d+\\s+(minutes|hours|days|weeks|months)\\s+ago/)) {
-      datePosted = text;
+  let sellerName = "";
+  
+  console.log("Starting to scrape data from page");
+  
+  // Try multiple selectors for different Facebook layouts
+  
+  // Extract title - try multiple possible selectors
+  const titleSelectors = [
+    '[data-testid="marketplace_pdp_title"]',
+    'span.x1lliihq.x6ikm8r.x10wlt62.x1n2onr6',
+    'h1',
+    '.xzsf02u' // Another common title class
+  ];
+  
+  for (const selector of titleSelectors) {
+    const element = document.querySelector(selector);
+    if (element && element.textContent.trim()) {
+      title = element.textContent.trim();
+      console.log("Found title:", title);
       break;
     }
   }
   
-  // Extract seller name
-  let sellerName = "";
-  const sellerElement = document.querySelector('[data-testid="marketplace_pdp_seller_info"] span');
-  if (sellerElement) {
-    sellerName = sellerElement.textContent.trim();
+  // Extract price - try multiple possible selectors
+  const priceSelectors = [
+    '[data-testid="marketplace_pdp_price"]',
+    'span.x193iq5w.xeuugli.x13faqbe.x1vvkbs.x1xmvt09.x1lliihq.x1s928wv.xhkezso.x1gmr53x.x1cpjm7i.x1fgarty.x1943h6x.xudqn12.x676frb.x1lkfr7t.x1lbecb7.x1s688f.xzsf02u',
+    'span.x1lliihq.x6ikm8r.x10wlt62.x1n2onr6:not([data-testid="marketplace_pdp_title"])'
+  ];
+  
+  for (const selector of priceSelectors) {
+    const element = document.querySelector(selector);
+    if (element && element.textContent.trim()) {
+      price = element.textContent.trim();
+      console.log("Found price:", price);
+      break;
+    }
+  }
+  
+  // Extract location - try multiple possible selectors
+  const locationSelectors = [
+    '[data-testid="marketplace_pdp_location"]',
+    'span:contains("in")',
+    'a[href*="marketplace/item"]'
+  ];
+  
+  for (const selector of locationSelectors) {
+    let elements;
+    if (selector.includes(':contains')) {
+      // Custom contains selector
+      elements = Array.from(document.querySelectorAll('span')).filter(el => 
+        el.textContent.includes(' in ') && !el.textContent.includes('Posted in')
+      );
+    } else {
+      elements = document.querySelectorAll(selector);
+    }
+    
+    for (const element of elements) {
+      const text = element.textContent.trim();
+      if (text && text.includes(' in ')) {
+        location = text.split(' in ')[1].trim();
+        console.log("Found location:", location);
+        break;
+      }
+    }
+    
+    if (location) break;
+  }
+  
+  // Extract date posted - try multiple possible selectors
+  const dateSelectors = [
+    'span:contains("Posted")',
+    'span:contains("ago")'
+  ];
+  
+  for (const selector of dateSelectors) {
+    if (selector.includes(':contains')) {
+      // Custom contains selector
+      const elements = Array.from(document.querySelectorAll('span')).filter(el => 
+        el.textContent.includes('Posted') || 
+        el.textContent.includes('ago') ||
+        el.textContent.match(/\\d+\\s+(minutes|hours|days|weeks|months)\\s+ago/)
+      );
+      
+      for (const element of elements) {
+        const text = element.textContent.trim();
+        if (text) {
+          datePosted = text;
+          console.log("Found date:", datePosted);
+          break;
+        }
+      }
+    }
+    
+    if (datePosted) break;
+  }
+  
+  // Extract seller name - try multiple possible selectors
+  const sellerSelectors = [
+    '[data-testid="marketplace_pdp_seller_info"] span',
+    'a[href*="/user/"]',
+    'a[href*="/profile.php"]'
+  ];
+  
+  for (const selector of sellerSelectors) {
+    const element = document.querySelector(selector);
+    if (element && element.textContent.trim()) {
+      sellerName = element.textContent.trim();
+      console.log("Found seller:", sellerName);
+      break;
+    }
+  }
+  
+  // Try a fallback method for getting basic page info if selectors failed
+  if (!title) {
+    const h1 = document.querySelector('h1');
+    if (h1) title = h1.textContent.trim();
+  }
+  
+  if (!price) {
+    // Look for currency symbols
+    const currencyElements = Array.from(document.querySelectorAll('span')).filter(
+      el => /[$€£¥]/.test(el.textContent)
+    );
+    if (currencyElements.length > 0) {
+      price = currencyElements[0].textContent.trim();
+    }
   }
   
   // Extract vehicle details if present
@@ -101,6 +199,16 @@ function scrapeListingData() {
       }
     }
   }
+  
+  console.log("Final scraped data:", {
+    title,
+    price,
+    location,
+    datePosted,
+    sellerName,
+    url,
+    vehicleDetails
+  });
   
   return {
     title,

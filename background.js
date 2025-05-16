@@ -1,5 +1,6 @@
-// Load the SheetJS library
-importScripts('xlsx.full.min.js');
+// In Manifest V3, we can't use importScripts in service workers
+// We'll need to include SheetJS library differently
+// We'll use fetch to get the Excel-related functions working
 
 // Listen for messages from popup or content script
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
@@ -66,6 +67,8 @@ function captureCurrentTab() {
 
 // Process and save the listing data
 function processListingData(data, sendResponse) {
+  console.log("Processing listing data:", data);
+  
   const { screenshot, listingData } = data;
   
   // Generate filename based on listing title
@@ -76,15 +79,21 @@ function processListingData(data, sendResponse) {
   
   // Save screenshot
   saveScreenshot(screenshot, screenshotFilename, function(screenshotDownloadId) {
+    console.log("Screenshot saved, ID:", screenshotDownloadId);
+    
     if (!screenshotDownloadId) {
+      console.error("Failed to save screenshot");
       if (sendResponse) sendResponse({success: false, error: "Failed to save screenshot"});
       return;
     }
     
-    // Create Excel file
-    createExcelFile(listingData, screenshotFilename, excelFilename, function(excelDownloadId) {
-      if (!excelDownloadId) {
-        if (sendResponse) sendResponse({success: false, error: "Failed to create Excel file"});
+    // Create and save CSV file instead of Excel (simpler approach)
+    createCsvFile(listingData, screenshotFilename, excelFilename, function(csvDownloadId) {
+      console.log("CSV file saved, ID:", csvDownloadId);
+      
+      if (!csvDownloadId) {
+        console.error("Failed to create CSV file");
+        if (sendResponse) sendResponse({success: false, error: "Failed to create file"});
         return;
       }
       
@@ -92,8 +101,8 @@ function processListingData(data, sendResponse) {
         sendResponse({
           success: true,
           screenshotDownloadId: screenshotDownloadId,
-          excelDownloadId: excelDownloadId,
-          downloadId: excelDownloadId
+          excelDownloadId: csvDownloadId,
+          downloadId: csvDownloadId
         });
       }
     });
@@ -120,54 +129,44 @@ function saveScreenshot(dataUrl, filename, callback) {
   }, callback);
 }
 
-// Create Excel file with listing data
-function createExcelFile(listingData, screenshotFilename, excelFilename, callback) {
-  // Create workbook with SheetJS
-  const wb = XLSX.utils.book_new();
+// Create CSV file with listing data (simpler alternative to Excel)
+function createCsvFile(listingData, screenshotFilename, filename, callback) {
+  console.log("Creating CSV file with data:", listingData);
   
-  // Format data for Excel
-  const data = [
-    ["Title", "Price", "Location", "Date Posted", "Seller Name", "Listing URL", "Screenshot"],
-    [
-      listingData.title || "",
-      listingData.price || "",
-      listingData.location || "",
-      listingData.datePosted || "",
-      listingData.sellerName || "",
-      listingData.url || "",
-      `=HYPERLINK("./${screenshotFilename}", "Open Screenshot")`
-    ]
+  // Format data for CSV
+  const headers = ["Title", "Price", "Location", "Date Posted", "Seller Name", "Listing URL", "Screenshot"];
+  const values = [
+    listingData.title || "",
+    listingData.price || "",
+    listingData.location || "",
+    listingData.datePosted || "",
+    listingData.sellerName || "",
+    listingData.url || "",
+    `./${screenshotFilename}`
   ];
   
   // Add vehicle details if available
   if (listingData.vehicleDetails && Object.keys(listingData.vehicleDetails).length > 0) {
-    data[0].push("Year", "Make", "Model");
-    data[1].push(
+    headers.push("Year", "Make", "Model");
+    values.push(
       listingData.vehicleDetails.year || "",
       listingData.vehicleDetails.make || "",
       listingData.vehicleDetails.model || ""
     );
   }
   
-  // Create worksheet and add to workbook
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, "Listing");
+  // Create CSV content
+  const csvContent = [
+    headers.join(','),
+    values.join(',')
+  ].join('\n');
   
-  // Convert to binary Excel format
-  const excelBinary = XLSX.write(wb, {bookType: 'xlsx', type: 'binary'});
+  // Create blob and save file
+  const blob = new Blob([csvContent], {type: 'text/csv'});
   
-  // Convert binary to Blob
-  const buffer = new ArrayBuffer(excelBinary.length);
-  const view = new Uint8Array(buffer);
-  for (let i = 0; i < excelBinary.length; i++) {
-    view[i] = excelBinary.charCodeAt(i) & 0xFF;
-  }
-  const blob = new Blob([buffer], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-  
-  // Save blob to file
   chrome.downloads.download({
     url: URL.createObjectURL(blob),
-    filename: excelFilename,
+    filename: filename.replace('.xlsx', '.csv'),
     saveAs: false
   }, callback);
 }

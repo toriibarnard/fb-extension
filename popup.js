@@ -41,45 +41,78 @@ document.addEventListener('DOMContentLoaded', function() {
       // Step 1: Take screenshot
       chrome.tabs.sendMessage(tabId, {action: "captureScreenshot"}, function(response) {
         if (chrome.runtime.lastError) {
+          console.error("Error taking screenshot:", chrome.runtime.lastError);
           showError("Error: " + chrome.runtime.lastError.message);
           return;
         }
         
         if (!response) {
-          showError("Error: No response from content script");
+          console.error("No response from content script for screenshot request");
+          showError("Error: Content script not responding. Please refresh the page and try again.");
           return;
         }
         
         statusText.textContent = 'Scraping data...';
+        console.log("Screenshot pending, now scraping data...");
         
         // Step 2: Scrape data
         chrome.tabs.sendMessage(tabId, {action: "scrapeData"}, function(listingData) {
-          if (chrome.runtime.lastError || !listingData) {
-            showError("Error scraping data");
+          if (chrome.runtime.lastError) {
+            console.error("Error scraping data:", chrome.runtime.lastError);
+            showError("Error scraping data: " + chrome.runtime.lastError.message);
             return;
           }
           
-          statusText.textContent = 'Creating Excel file...';
+          if (!listingData) {
+            console.error("No listing data returned from content script");
+            showError("Error: Could not extract listing data. Please try again.");
+            return;
+          }
           
-          // Step 3: Save screenshot and create Excel file
-          chrome.runtime.sendMessage({
-            action: "processListing", 
-            data: {
-              screenshot: response.screenshot,
-              listingData: listingData
-            }
-          }, function(response) {
-            if (chrome.runtime.lastError || !response || !response.success) {
-              showError("Error processing data");
+          statusText.textContent = 'Taking screenshot...';
+          console.log("Data scraped:", listingData);
+          
+          // Now get the actual screenshot
+          chrome.tabs.captureVisibleTab(function(screenshotDataUrl) {
+            if (chrome.runtime.lastError) {
+              console.error("Error capturing tab:", chrome.runtime.lastError);
+              showError("Error capturing screenshot: " + chrome.runtime.lastError.message);
               return;
             }
             
-            lastSavedFile = response.downloadId;
+            console.log("Screenshot captured, length:", screenshotDataUrl ? screenshotDataUrl.length : 0);
+            statusText.textContent = 'Creating file...';
             
-            // Show success
-            status.classList.add('hidden');
-            result.classList.remove('hidden');
-            resultText.textContent = `Listing saved successfully! Screenshot and Excel file saved in your Downloads folder.`;
+            // Step 3: Save screenshot and create file
+            chrome.runtime.sendMessage({
+              action: "processListing", 
+              data: {
+                screenshot: screenshotDataUrl,
+                listingData: listingData
+              }
+            }, function(response) {
+              console.log("Process listing response:", response);
+              
+              if (chrome.runtime.lastError) {
+                console.error("Error processing listing:", chrome.runtime.lastError);
+                showError("Error processing data: " + chrome.runtime.lastError.message);
+                return;
+              }
+              
+              if (!response || !response.success) {
+                console.error("Processing failed:", response);
+                showError("Error: Failed to save data. " + (response ? response.error : ""));
+                return;
+              }
+              
+              lastSavedFile = response.downloadId;
+              
+              // Show success
+              status.classList.add('hidden');
+              result.classList.remove('hidden');
+              openFileBtn.classList.remove('hidden');
+              resultText.textContent = `Listing saved successfully! Screenshot and CSV file saved in your Downloads folder.`;
+            });
           });
         });
       });
