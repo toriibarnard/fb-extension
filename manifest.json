@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Marketplace Vehicle Collector",
+  "version": "1.0",
+  "description": "Save Facebook Marketplace vehicle listings with screenshots to Excel",
+  "permissions": [
+    "activeTab", 
+    "storage", 
+    "scripting", 
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://*.facebook.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.facebook.com/marketplace/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  },
+  "commands": {
+    "save_listing": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Save the current listing to Excel"
+    }
+  }
+}
