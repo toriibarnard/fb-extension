@@ -613,7 +613,7 @@ function extractListingData() {
     }
   }
   
-  // NEW APPROACH FOR PRICE - focus on the visible viewport
+  // FIND PRICE - focus on the visible viewport
   // The visible listing will be in the main part of the viewport
   const pricePattern = /^CA\$[\d,]+$/;
   let foundPrice = false;
@@ -745,180 +745,215 @@ function extractListingData() {
     console.log("Using fallback price:", data.price);
   }
   
-  // NEW APPROACH FOR LOCATION - using viewport and additional signals
-  const maritimeLocationPattern = /[A-Za-z\s-]+,\s*(NS|NB|PE|NL|ON|QC|MB|SK|AB|BC|YT|NT|NU)$/;
-  const distancePattern = /(km|miles|minutes|hours)\s+away/;
+  // TARGETED LOCATION DETECTION - key fix for finding the right location
+  // We'll look specifically for location data directly related to the price we found
+  
+  // Store price element for location reference
+  let priceElement = null;
+  
+  // Find the element containing our identified price
+  if (data.price !== "N/A") {
+    document.querySelectorAll('*').forEach(el => {
+      if (el.textContent.trim() === data.price) {
+        priceElement = el;
+      }
+    });
+  }
+  
+  console.log("Price element found:", priceElement ? "Yes" : "No");
+  
+  // Location patterns
+  const locationPatterns = [
+    /^[A-Za-z\s-]+,\s*(NS|NB|PE|NL|ON|QC|MB|SK|AB|BC|YT|NT|NU)$/,  // City, Province with comma
+    /^[A-Za-z\s-]+ (NS|NB|PE|NL|ON|QC|MB|SK|AB|BC|YT|NT|NU)$/,      // City Province without comma
+    /^\d+\s+(km|miles|minutes|hours)\s+away$/                       // Distance format
+  ];
+  
   let foundLocation = false;
   
-  console.log("Using viewport-based approach for location");
-  
-  // Get the viewport dimensions (already defined in price section)
-
-  // Use the same main content area definition as for price
-  
-  // Collect all potential location elements with their position
-  const allLocationElements = [];
-  
-  document.querySelectorAll('*').forEach(el => {
-    const text = el.textContent.trim();
+  // STRATEGY 1: Find location element immediately after the price in the DOM
+  if (priceElement) {
+    console.log("Looking for location after price");
     
-    // Skip if element doesn't match our patterns or contains excluded words
-    if (!(maritimeLocationPattern.test(text) || distancePattern.test(text)) || 
-        text.includes("Listed") || 
-        text.includes("Filter") || 
-        text.length > 50) {
-      return;
-    }
+    // Get price position
+    const priceRect = priceElement.getBoundingClientRect();
     
-    const rect = el.getBoundingClientRect();
-    
-    // Check if element is in the main content area
-    const inMainContent = (
-      rect.top >= mainContentArea.top &&
-      rect.bottom <= mainContentArea.bottom &&
-      rect.left >= mainContentArea.left &&
-      rect.right <= mainContentArea.right
-    );
-    
-    // Check if element is near any identified elements from the current listing
-    let nearIdentifiedElement = false;
-    
-    // If we've found the price, check if this location is near it
-    if (data.price !== "N/A") {
-      // Find the price element in the DOM
-      document.querySelectorAll('*').forEach(priceEl => {
-        if (priceEl.textContent.trim() === data.price) {
-          // Check if the location is within 100px of the price
-          const priceRect = priceEl.getBoundingClientRect();
-          const distance = Math.sqrt(
-            Math.pow((rect.left + rect.width/2) - (priceRect.left + priceRect.width/2), 2) +
-            Math.pow((rect.top + rect.height/2) - (priceRect.top + priceRect.height/2), 2)
-          );
-          
-          if (distance < 200) { // Within 200px
-            nearIdentifiedElement = true;
-          }
-        }
-      });
-    }
-    
-    // If we've found the mileage, check if this location is near it
-    if (!nearIdentifiedElement && data.mileage !== "N/A") {
-      document.querySelectorAll('*').forEach(mileageEl => {
-        if (mileageEl.textContent.trim() === data.mileage) {
-          // Locations are often near mileage in FB Marketplace
-          const mileageRect = mileageEl.getBoundingClientRect();
-          const distance = Math.sqrt(
-            Math.pow((rect.left + rect.width/2) - (mileageRect.left + mileageRect.width/2), 2) +
-            Math.pow((rect.top + rect.height/2) - (mileageRect.top + mileageRect.height/2), 2)
-          );
-          
-          if (distance < 300) { // Within 300px
-            nearIdentifiedElement = true;
-          }
-        }
-      });
-    }
-    
-    // Add to our collection
-    allLocationElements.push({
-      element: el,
-      text: text,
-      rect: rect,
-      inMainContent: inMainContent,
-      nearIdentifiedElement: nearIdentifiedElement,
-      fontSize: parseInt(window.getComputedStyle(el).fontSize || '0')
-    });
-  });
-  
-  console.log("Found " + allLocationElements.length + " potential location elements");
-  
-  // First priority: Location elements that are near other identified elements
-  const nearIdentifiedLocations = allLocationElements.filter(item => item.nearIdentifiedElement);
-  if (nearIdentifiedLocations.length > 0) {
-    data.location = nearIdentifiedLocations[0].text;
-    console.log("Found location near price or mileage:", data.location);
-    foundLocation = true;
-  }
-  
-  // Second priority: Location elements in the main content area
-  if (!foundLocation) {
-    const mainContentLocations = allLocationElements
-      .filter(item => item.inMainContent)
-      .sort((a, b) => b.fontSize - a.fontSize); // Prioritize by font size
-    
-    if (mainContentLocations.length > 0) {
-      data.location = mainContentLocations[0].text;
-      console.log("Found location in main content area:", data.location);
-      foundLocation = true;
-    }
-  }
-  
-  // Third priority: If we have title, check if any location is in the same section
-  if (!foundLocation && titleElement) {
-    // Get all ancestors up to 3 levels
-    const ancestors = [];
-    let current = titleElement.parentElement;
-    for (let i = 0; i < 5; i++) { // Check more levels than price
-      if (!current) break;
-      ancestors.push(current);
-      current = current.parentElement;
-    }
-    
-    // Check if any location elements are descendants of these ancestors
-    for (const ancestor of ancestors) {
-      if (foundLocation) break;
+    // Look for elements below the price in the visual layout
+    const elementsBelowPrice = [];
+    document.querySelectorAll('span, div, p').forEach(el => {
+      // Skip if it's the price element or contains the price text
+      if (el === priceElement || el.textContent.trim() === data.price) return;
       
-      // For each location element, check if it's a descendant of this ancestor
-      for (const locItem of allLocationElements) {
-        let el = locItem.element;
-        while (el) {
-          if (el === ancestor) {
-            data.location = locItem.text;
-            console.log("Found location in same section as title:", data.location);
-            foundLocation = true;
-            break;
-          }
-          el = el.parentElement;
-        }
-        if (foundLocation) break;
+      const text = el.textContent.trim();
+      if (!text || text.length > 50) return;
+      
+      const rect = el.getBoundingClientRect();
+      
+      // Check if element is reasonably near the price in the layout
+      if (rect.top >= priceRect.bottom && 
+          rect.top - priceRect.bottom < 150 &&  // Within 150px below
+          Math.abs((rect.left + rect.width/2) - (priceRect.left + priceRect.width/2)) < 250) { // Somewhat aligned
+        
+        elementsBelowPrice.push({
+          element: el,
+          text: text,
+          distance: rect.top - priceRect.bottom // Vertical distance from price
+        });
+      }
+    });
+    
+    // Sort by vertical distance from price
+    elementsBelowPrice.sort((a, b) => a.distance - b.distance);
+    
+    // Look for location patterns in these elements
+    for (const item of elementsBelowPrice) {
+      const text = item.text;
+      
+      // Skip if it contains year pattern (usually part of title)
+      if (yearPattern.test(text)) continue;
+      
+      // Skip if it contains price pattern
+      if (pricePattern.test(text)) continue;
+      
+      // Check against location patterns
+      if (locationPatterns.some(pattern => pattern.test(text))) {
+        data.location = text;
+        console.log("Found location below price matching pattern:", data.location);
+        foundLocation = true;
+        break;
+      }
+      
+      // Check for simpler pattern of text with comma and province code
+      if (text.includes(",") && 
+          /(NS|NB|PE|NL|ON|QC|MB|SK|AB|BC|YT|NT|NU)/.test(text) &&
+          text.length < 30) {
+        data.location = text;
+        console.log("Found location below price with province:", data.location);
+        foundLocation = true;
+        break;
+      }
+      
+      // Check for distance pattern
+      if (text.includes("km away") || text.includes("miles away")) {
+        data.location = text;
+        console.log("Found location with distance:", data.location);
+        foundLocation = true;
+        break;
       }
     }
   }
   
-  // Fourth priority: Calculate visibility score as with price
-  if (!foundLocation && allLocationElements.length > 0) {
-    const scoredLocations = allLocationElements.map(item => {
-      // Center of the viewport has higher score
-      const centerX = viewportWidth / 2;
-      const centerY = viewportHeight / 2;
-      const elementCenterX = item.rect.left + (item.rect.width / 2);
-      const elementCenterY = item.rect.top + (item.rect.height / 2);
-      
-      // Distance from center (normalized)
-      const distanceFromCenter = Math.sqrt(
-        Math.pow(elementCenterX - centerX, 2) + 
-        Math.pow(elementCenterY - centerY, 2)
-      ) / Math.sqrt(Math.pow(viewportWidth, 2) + Math.pow(viewportHeight, 2));
-      
-      // Prioritize elements in the top half of the page
-      const topHalfBonus = item.rect.top < (viewportHeight / 2) ? 1.5 : 1.0;
-      
-      // Font size score
-      const fontSizeScore = item.fontSize / 16; // normalize
-      
-      // Combine scores
-      const visibilityScore = fontSizeScore * (1 - distanceFromCenter) * topHalfBonus;
-      
-      return {
-        ...item,
-        score: visibilityScore
-      };
-    }).sort((a, b) => b.score - a.score); // Sort by score
+  // STRATEGY 2: Search for location near price in DOM structure
+  if (!foundLocation && priceElement) {
+    console.log("Looking for location in DOM structure near price");
     
-    data.location = scoredLocations[0].text;
-    console.log("Found location with highest visibility score:", data.location);
-    foundLocation = true;
+    // Walk up a few levels from price to find common container
+    let searchContainer = priceElement;
+    for (let i = 0; i < 3 && !foundLocation; i++) {
+      searchContainer = searchContainer.parentElement;
+      if (!searchContainer) break;
+      
+      // Look for location pattern in this container, excluding the price itself
+      const locationCandidates = [];
+      searchContainer.querySelectorAll('span, div, p').forEach(el => {
+        if (el === priceElement || el.contains(priceElement) || priceElement.contains(el)) return;
+        
+        const text = el.textContent.trim();
+        if (!text || text.length > 50) return;
+        
+        // Skip if it contains year or price
+        if (yearPattern.test(text) || pricePattern.test(text)) return;
+        
+        // Check against location patterns
+        let matchesPattern = false;
+        for (const pattern of locationPatterns) {
+          if (pattern.test(text)) {
+            matchesPattern = true;
+            break;
+          }
+        }
+        
+        // Also check for comma + province or "away" pattern
+        const hasProvinceCode = /(NS|NB|PE|NL|ON|QC|MB|SK|AB|BC|YT|NT|NU)/.test(text);
+        const isDistanceAway = text.includes("km away") || text.includes("miles away");
+        
+        if (matchesPattern || (text.includes(",") && hasProvinceCode) || isDistanceAway) {
+          locationCandidates.push({
+            element: el,
+            text: text,
+            matchesPattern: matchesPattern
+          });
+        }
+      });
+      
+      // Prioritize exact pattern matches
+      const patternMatches = locationCandidates.filter(item => item.matchesPattern);
+      if (patternMatches.length > 0) {
+        data.location = patternMatches[0].text;
+        console.log("Found location in DOM structure with exact pattern:", data.location);
+        foundLocation = true;
+      } else if (locationCandidates.length > 0) {
+        data.location = locationCandidates[0].text;
+        console.log("Found location in DOM structure with approximate pattern:", data.location);
+        foundLocation = true;
+      }
+    }
+  }
+  
+  // STRATEGY 3: Fall back to simple location pattern matching in main content area
+  if (!foundLocation) {
+    console.log("Falling back to simple location pattern matching");
+    
+    // Get all elements in the main content area
+    const mainContentElements = [];
+    document.querySelectorAll('span, div, p').forEach(el => {
+      const text = el.textContent.trim();
+      if (!text || text.length > 50) return;
+      
+      // Skip if it contains year or price
+      if (yearPattern.test(text) || pricePattern.test(text)) return;
+      
+      const rect = el.getBoundingClientRect();
+      const inMainContent = (
+        rect.top >= mainContentArea.top &&
+        rect.bottom <= mainContentArea.bottom &&
+        rect.left >= mainContentArea.left &&
+        rect.right <= mainContentArea.right
+      );
+      
+      if (inMainContent) {
+        mainContentElements.push({
+          element: el,
+          text: text,
+          position: rect.top
+        });
+      }
+    });
+    
+    // Check for location patterns
+    for (const item of mainContentElements) {
+      const text = item.text;
+      
+      // Check against location patterns
+      let isLocation = false;
+      for (const pattern of locationPatterns) {
+        if (pattern.test(text)) {
+          isLocation = true;
+          break;
+        }
+      }
+      
+      // Also check for comma + province or "away" pattern
+      const hasProvinceCode = /(NS|NB|PE|NL|ON|QC|MB|SK|AB|BC|YT|NT|NU)/.test(text);
+      const isDistanceAway = text.includes("km away") || text.includes("miles away");
+      
+      if (isLocation || (text.includes(",") && hasProvinceCode) || isDistanceAway) {
+        data.location = text;
+        console.log("Found location in main content area:", data.location);
+        foundLocation = true;
+        break;
+      }
+    }
   }
   
   // FIND LISTING DATE - multiple patterns
