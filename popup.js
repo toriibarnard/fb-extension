@@ -526,9 +526,9 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
-// Direct pattern matching for FB Marketplace
+// Improved extractListingData function with more robust pattern matching
 function extractListingData() {
-  console.log("Starting extraction with direct pattern matching");
+  console.log("Starting extraction with improved pattern matching");
   
   // Initialize with empty values
   const data = {
@@ -539,164 +539,372 @@ function extractListingData() {
     sellerName: "N/A",
     mileage: "N/A",
     url: window.location.href,
-    year: "N/A"
+    year: "N/A",
+    make: "N/A",
+    model: "N/A"
   };
   
-  // FIND PRICE - very specific format "CA$XXX,XXX"
-  const pricePattern = /^CA\$[\d,]+$/;
-  const priceElements = Array.from(document.querySelectorAll('*')).filter(el => {
-    const text = el.textContent.trim();
-    return pricePattern.test(text);
-  });
+  // Get all text elements for analysis
+  const allTextElements = Array.from(document.querySelectorAll('span, div, h1, h2, h3, p'))
+    .filter(el => {
+      const text = el.textContent.trim();
+      return text && text.length > 0 && text.length < 200;
+    })
+    .map(el => ({
+      element: el,
+      text: el.textContent.trim(),
+      fontSize: parseInt(window.getComputedStyle(el).fontSize || '0')
+    }));
   
-  if (priceElements.length > 0) {
-    data.price = priceElements[0].textContent.trim();
-    console.log("Found price:", data.price);
-    
-  // FIND TITLE - find text with year pattern that's near the top
-  // Specifically find text starting with a year, as you mentioned
-  const yearPattern = /^(19|20)\d{2}\b/;
-  const titleElements = Array.from(document.querySelectorAll('h1, h2, span, div')).filter(el => {
-    const text = el.textContent.trim();
-    return yearPattern.test(text) && 
-           text.length > 5 && 
-           text.length < 100 &&
-           !text.includes("Listed") &&
-           !text.includes("Marketplace");
-  });
+  // Log all elements for debugging
+  console.log("Found " + allTextElements.length + " text elements");
+  
+  // FIND TITLE - multiple approaches
+  // Approach 1: Find text with year pattern that's near the top
+  const yearPattern = /\b(19|20)\d{2}\b/;
+  const titleElements = allTextElements.filter(item => 
+    yearPattern.test(item.text) && 
+    item.text.length > 5 && 
+    item.text.length < 100 &&
+    !item.text.includes("Listed") &&
+    !item.text.includes("Marketplace") &&
+    item.fontSize >= 16 // Likely a heading or title
+  );
+  
+  // Store the title element for later contextual searches
+  const titleElement = titleElements.length > 0 ? titleElements[0].element : null;
   
   if (titleElements.length > 0) {
-    data.title = titleElements[0].textContent.trim();
-    console.log("Found title (starting with year):", data.title);
+    data.title = titleElements[0].text;
+    console.log("Found title (with year):", data.title);
     
-    // Extract year if present (for internal use only)
+    // Extract year, make, model if present
     const yearMatch = data.title.match(/\b(19|20)\d{2}\b/);
     if (yearMatch) {
       data.year = yearMatch[0];
-    }
-  } else {
-    // Try alternate approach: Larger font size elements near the top
-    const allElements = Array.from(document.querySelectorAll('*'));
-    let largestFontSize = 0;
-    let bestTitleCandidate = null;
-    
-    for (const el of allElements) {
-      const text = el.textContent.trim();
-      if (text.length > 5 && 
-          text.length < 100 && 
-          !text.includes("Marketplace") &&
-          !text.includes("Facebook") &&
-          !text.includes("Listed") &&
-          !text.includes("Message")) {
-        
-        const style = window.getComputedStyle(el);
-        const fontSize = parseInt(style.fontSize || '0');
-        
-        if (fontSize > largestFontSize) {
-          largestFontSize = fontSize;
-          bestTitleCandidate = el;
+      
+      // Attempt to extract make/model
+      const afterYear = data.title.substring(data.title.indexOf(data.year) + 4).trim();
+      const parts = afterYear.split(' ');
+      if (parts.length > 0) {
+        data.make = parts[0];
+        if (parts.length > 1) {
+          data.model = parts.slice(1).join(' ');
         }
       }
     }
+  } else {
+    // Approach 2: Larger font size elements near the top
+    const sortedByFontSize = [...allTextElements].sort((a, b) => b.fontSize - a.fontSize);
     
-    if (bestTitleCandidate) {
-      data.title = bestTitleCandidate.textContent.trim();
-      console.log("Found title (by font size):", data.title);
-    }
-  }
-  }
-  
-  // FIND LOCATION - "city, province" where province is NS, NB, or PE
-  const locationPattern = /[A-Za-z\s-]+,\s*(NS|NB|PE)$/;
-  const locationElements = Array.from(document.querySelectorAll('*')).filter(el => {
-    const text = el.textContent.trim();
-    return locationPattern.test(text) && 
-           text.length < 50 && 
-           !text.includes("Listed") && 
-           !text.includes("Filter");
-  });
-  
-  if (locationElements.length > 0) {
-    data.location = locationElements[0].textContent.trim();
-    console.log("Found location:", data.location);
-  }
-  
-  // FIND LISTING DATE - between "Listed" and "in"
-  const dateElements = Array.from(document.querySelectorAll('*')).filter(el => {
-    const text = el.textContent.trim();
-    return text.includes("Listed") && 
-           text.includes(" in ") && 
-           text.length < 100;
-  });
-  
-  if (dateElements.length > 0) {
-    const fullText = dateElements[0].textContent.trim();
-    const match = fullText.match(/Listed\s+(.*?)\s+in/i);
-    if (match && match[1]) {
-      data.datePosted = match[1].trim();
-      console.log("Found date (between 'Listed' and 'in'):", data.datePosted);
-    }
-  }
-  
-  // FIND MILEAGE - always "Driven xxx,xxx km"
-  const mileagePattern = /^Driven\s+[\d,]+\s+km$/;
-  const mileageElements = Array.from(document.querySelectorAll('*')).filter(el => {
-    const text = el.textContent.trim();
-    return text.startsWith("Driven ") && 
-           text.endsWith(" km") && 
-           text.length < 50;
-  });
-  
-  if (mileageElements.length > 0) {
-    data.mileage = mileageElements[0].textContent.trim();
-    console.log("Found mileage:", data.mileage);
-  }
-  
-  // FIND SELLER NAME - better approach looking for text between "Seller details" and "Joined Facebook"
-  // Collect all text from elements on the page
-  const allElements = document.querySelectorAll('*');
-  let sellerSection = false;
-  let joinedSection = false;
-  
-  // Find text between "Seller details" and "Joined Facebook"
-  for (const el of allElements) {
-    const text = el.textContent.trim();
-    
-    // Skip if the element is empty or too long
-    if (!text || text.length > 100) continue;
-    
-    if (text === "Seller details" || text === "Seller information") {
-      sellerSection = true;
-      continue;
-    }
-    
-    if (text.includes("Joined Facebook")) {
-      joinedSection = true;
-      break;
-    }
-    
-    // If we're between Seller details and Joined Facebook
-    if (sellerSection && !joinedSection && text.length > 1) {
-      // Skip common non-name texts
-      if (text === "Seller details" || 
-          text === "Seller information" || 
-          text.includes("Joined") ||
-          text.includes("Message") ||
-          text.includes("is this still") ||
-          text.includes("available")) {
-        continue;
-      }
-      
-      // Names are usually 2+ characters, with no special symbols
-      if (text.length > 2 && 
-          text.length < 50 && 
-          /^[A-Za-z\s\.\-']+$/.test(text)) {
-        data.sellerName = text;
-        console.log("Found seller name:", data.sellerName);
+    for (const item of sortedByFontSize) {
+      if (item.text.length > 5 && 
+          item.text.length < 100 && 
+          !item.text.includes("Marketplace") &&
+          !item.text.includes("Facebook") &&
+          !item.text.includes("Listed") &&
+          !item.text.includes("Message") &&
+          item.fontSize >= 16) {
+        
+        data.title = item.text;
+        console.log("Found title (by font size):", data.title);
         break;
       }
     }
   }
+  
+  // FIND PRICE - using contextual proximity to title
+  let foundPrice = false;
+  
+  // First attempt: Use visual proximity and specific format
+  const pricePattern = /^CA\$[\d,]+$/;
+  
+  if (titleElement) {
+    // Try to find price near the title in the DOM
+    // First look for nearby siblings and parents/children
+    const titleParent = titleElement.parentElement;
+    const nearTitleElements = [];
+    
+    // Add siblings and their children to check
+    if (titleParent) {
+      // Look at parent's children (siblings of title element)
+      Array.from(titleParent.children).forEach(sibling => {
+        nearTitleElements.push(sibling);
+        // Also add their children
+        Array.from(sibling.querySelectorAll('*')).forEach(child => {
+          nearTitleElements.push(child);
+        });
+      });
+      
+      // Look at parent's siblings
+      if (titleParent.parentElement) {
+        Array.from(titleParent.parentElement.children).forEach(parentSibling => {
+          nearTitleElements.push(parentSibling);
+        });
+      }
+    }
+    
+    // Filter and look for price pattern among nearby elements
+    const nearbyPriceElements = Array.from(nearTitleElements)
+      .filter(el => {
+        const text = el.textContent.trim();
+        return pricePattern.test(text);
+      })
+      .map(el => ({ element: el, text: el.textContent.trim() }));
+    
+    if (nearbyPriceElements.length > 0) {
+      data.price = nearbyPriceElements[0].text;
+      console.log("Found price near title:", data.price);
+      foundPrice = true;
+    }
+  }
+  
+  // Second attempt: Look for largest font size price on page
+  if (!foundPrice) {
+    const priceElements = allTextElements
+      .filter(item => pricePattern.test(item.text))
+      .sort((a, b) => b.fontSize - a.fontSize); // Sort by font size descending
+    
+    if (priceElements.length > 0) {
+      data.price = priceElements[0].text;
+      console.log("Found price by font size:", data.price);
+      foundPrice = true;
+    }
+  }
+  
+  // Third attempt: Regular search with specific conditions
+  if (!foundPrice) {
+    // Additional filtering - prices are usually displayed prominently
+    const priceElements = allTextElements.filter(item => 
+      pricePattern.test(item.text) && 
+      item.fontSize >= 16 && // Larger font sizes for main listing
+      item.element.getBoundingClientRect().top < window.innerHeight/2 // In the top half of the page
+    );
+    
+    if (priceElements.length > 0) {
+      data.price = priceElements[0].text;
+      console.log("Found price with additional filtering:", data.price);
+    }
+  }
+  
+  // FIND LOCATION - using contextual proximity
+  // Pattern 1: "city, province" where province is a code
+  const maritimeLocationPattern = /[A-Za-z\s-]+,\s*(NS|NB|PE|NL|ON|QC|MB|SK|AB|BC|YT|NT|NU)$/;
+  // Pattern 2: Distance format "X km away" or similar
+  const distancePattern = /(km|miles|minutes|hours)\s+away/;
+  
+  let foundLocation = false;
+  
+  // First attempt: Look near the title or price element
+  if (titleElement || (data.price !== "N/A")) {
+    // Get contextual elements
+    const contextElement = titleElement || 
+                           allTextElements.find(item => item.text === data.price)?.element;
+    
+    if (contextElement) {
+      // Use similar approach as with price
+      const nearbyElements = [];
+      
+      // Navigate DOM to find nearby elements
+      const contextParent = contextElement.parentElement;
+      if (contextParent) {
+        // Look at parent's children (siblings of context element)
+        Array.from(contextParent.children).forEach(sibling => {
+          nearbyElements.push(sibling);
+          // Also check their children
+          Array.from(sibling.querySelectorAll('*')).forEach(child => {
+            nearbyElements.push(child);
+          });
+        });
+        
+        // Look at parent itself and its siblings
+        nearbyElements.push(contextParent);
+        if (contextParent.parentElement) {
+          Array.from(contextParent.parentElement.children).forEach(parentSibling => {
+            nearbyElements.push(parentSibling);
+            // Check children of parent's siblings too
+            Array.from(parentSibling.querySelectorAll('*')).forEach(child => {
+              nearbyElements.push(child);
+            });
+          });
+        }
+      }
+      
+      // Find location pattern among nearby elements
+      for (const element of nearbyElements) {
+        const text = element.textContent.trim();
+        if ((maritimeLocationPattern.test(text) || distancePattern.test(text)) && 
+            text.length < 50 && 
+            !text.includes("Listed") && 
+            !text.includes("Filter")) {
+          
+          data.location = text;
+          console.log("Found location near title/price:", data.location);
+          foundLocation = true;
+          break;
+        }
+      }
+    }
+  }
+  
+  // Second attempt: Look for elements in the top part of the page with location patterns
+  if (!foundLocation) {
+    // Get positions for all potential location elements
+    const potentialLocationElements = allTextElements
+      .filter(item => 
+        (maritimeLocationPattern.test(item.text) || distancePattern.test(item.text)) && 
+        item.text.length < 50 && 
+        !item.text.includes("Listed") && 
+        !item.text.includes("Filter"))
+      .map(item => ({
+        ...item,
+        position: item.element.getBoundingClientRect().top
+      }))
+      .sort((a, b) => a.position - b.position); // Sort by vertical position (top to bottom)
+    
+    // Take the top-most location element - more likely to be the main listing
+    if (potentialLocationElements.length > 0) {
+      data.location = potentialLocationElements[0].text;
+      console.log("Found location by vertical position:", data.location);
+      foundLocation = true;
+    }
+  }
+  
+  // Third attempt: Regular pattern matching (original approach)
+  if (!foundLocation) {
+    const locationElements = allTextElements.filter(item => 
+      (maritimeLocationPattern.test(item.text) || distancePattern.test(item.text)) && 
+      item.text.length < 50 && 
+      !item.text.includes("Listed") && 
+      !item.text.includes("Filter")
+    );
+    
+    if (locationElements.length > 0) {
+      data.location = locationElements[0].text;
+      console.log("Found location with basic pattern matching:", data.location);
+    }
+  }
+  
+  // FIND LISTING DATE - multiple patterns
+  // Pattern 1: Text containing "Listed" and possibly "in"
+  const dateElements1 = allTextElements.filter(item => 
+    item.text.includes("Listed") && 
+    item.text.length < 100
+  );
+  
+  // Pattern 2: Text containing time references like "ago"
+  const dateElements2 = allTextElements.filter(item => 
+    (item.text.includes(" ago") || item.text.includes("Posted")) && 
+    item.text.length < 50 &&
+    !item.text.includes("Message")
+  );
+  
+  if (dateElements1.length > 0) {
+    const fullText = dateElements1[0].text;
+    const match = fullText.match(/Listed\s+(.*?)(?:\s+in|$)/i);
+    if (match && match[1]) {
+      data.datePosted = match[1].trim();
+      console.log("Found date (from 'Listed'):", data.datePosted);
+    }
+  } else if (dateElements2.length > 0) {
+    data.datePosted = dateElements2[0].text;
+    console.log("Found date (with 'ago'):", data.datePosted);
+  }
+  
+  // FIND MILEAGE - "Driven xxx,xxx km"
+  const mileageElements = allTextElements.filter(item => 
+    item.text.startsWith("Driven ") && 
+    item.text.includes(" km") && 
+    item.text.length < 50
+  );
+  
+  if (mileageElements.length > 0) {
+    data.mileage = mileageElements[0].text;
+    console.log("Found mileage:", data.mileage);
+  }
+  
+  // FIND SELLER NAME - multiple approaches
+  // First attempt: Find element after "Seller information" or "Seller details"
+  let foundSellerName = false;
+  
+  // Track if we've seen seller section identifiers
+  let sellerInfoIndex = -1;
+  let joinedFacebookIndex = -1;
+  
+  allTextElements.forEach((item, index) => {
+    if (item.text === "Seller details" || item.text === "Seller information") {
+      sellerInfoIndex = index;
+    }
+    if (item.text.includes("Joined Facebook")) {
+      joinedFacebookIndex = index;
+    }
+  });
+  
+  // Look for seller name between "Seller details" and "Joined Facebook"
+  if (sellerInfoIndex !== -1 && joinedFacebookIndex !== -1 && joinedFacebookIndex > sellerInfoIndex) {
+    for (let i = sellerInfoIndex + 1; i < joinedFacebookIndex; i++) {
+      const text = allTextElements[i].text;
+      if (text.length > 2 && 
+          text.length < 50 && 
+          text !== "Seller details" &&
+          text !== "Seller information" &&
+          !text.includes("Joined") &&
+          !text.includes("Message") &&
+          !text.includes("available") &&
+          /^[A-Za-z\s\.\-']+$/.test(text)) {
+        
+        data.sellerName = text;
+        console.log("Found seller name (between sections):", data.sellerName);
+        foundSellerName = true;
+        break;
+      }
+    }
+  }
+  
+  // Second attempt: Look for elements near seller information
+  if (!foundSellerName) {
+    const sellerSectionElements = document.querySelectorAll('*');
+    let inSellerSection = false;
+    
+    for (const el of sellerSectionElements) {
+      const text = el.textContent.trim();
+      
+      if (!text || text.length > 100) continue;
+      
+      if (text === "Seller details" || text === "Seller information") {
+        inSellerSection = true;
+        continue;
+      }
+      
+      if (inSellerSection && 
+          text.length > 2 && 
+          text.length < 50 && 
+          text !== "Seller details" &&
+          text !== "Seller information" &&
+          !text.includes("Message") &&
+          !text.includes("available") &&
+          /^[A-Za-z\s\.\-']+$/.test(text)) {
+        
+        data.sellerName = text;
+        console.log("Found seller name (in seller section):", data.sellerName);
+        foundSellerName = true;
+        break;
+      }
+      
+      // Stop looking if we encounter typical elements after seller section
+      if (inSellerSection && 
+          (text.includes("Joined Facebook") || text.includes("Description") || text.includes("Details"))) {
+        break;
+      }
+    }
+  }
+  
+  // Final data validation and cleanup
+  Object.keys(data).forEach(key => {
+    if (data[key] === "N/A" || !data[key]) {
+      console.log(`Warning: Could not find ${key}`);
+    }
+  });
   
   console.log("Final extracted data:", data);
   return data;
