@@ -1,7 +1,8 @@
 body {
   font-family: Arial, sans-serif;
-  width: 300px;
+  width: 350px;
   padding: 15px;
+  margin: 0;
 }
 
 .container {
@@ -16,6 +17,12 @@ h1 {
   color: #1877F2;
 }
 
+h2 {
+  font-size: 16px;
+  margin: 0;
+  color: #1877F2;
+}
+
 button {
   background-color: #1877F2;
   color: white;
@@ -24,14 +31,22 @@ button {
   border-radius: 4px;
   cursor: pointer;
   font-weight: bold;
+  margin-bottom: 8px;
 }
 
 button:hover {
   background-color: #166FE5;
 }
 
+.button-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 #status {
@@ -65,4 +80,86 @@ code {
   background-color: #f0f2f5;
   padding: 2px 4px;
   border-radius: 3px;
+}
+
+/* Saved Listings View */
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.listings-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+#exportAllBtn {
+  flex: 1;
+}
+
+#clearAllBtn {
+  flex: 1;
+  background-color: #e4e6eb;
+  color: #050505;
+}
+
+#clearAllBtn:hover {
+  background-color: #d8dadf;
+}
+
+#listings-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #dddfe2;
+  border-radius: 4px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid #dddfe2;
+}
+
+th {
+  background-color: #f0f2f5;
+  position: sticky;
+  top: 0;
+}
+
+tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+tr:hover {
+  background-color: #f0f2f5;
+}
+
+.listing-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.action-btn {
+  background-color: transparent;
+  color: #1877F2;
+  padding: 2px 5px;
+  font-size: 12px;
+}
+
+.delete-btn {
+  color: #ed5e68;
+}
+
+#no-listings {
+  padding: 20px;
+  text-align: center;
+  color: #65676b;
 }

@@ -2,25 +2,109 @@
 <html>
 <head>
   <title>FB Marketplace Scraper</title>
-  <link rel="stylesheet" href="popup.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      width: 350px;
+      padding: 15px;
+      margin: 0;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    
+    h1 {
+      font-size: 18px;
+      margin-top: 0;
+      color: #1877F2;
+    }
+    
+    button {
+      background-color: #1877F2;
+      color: white;
+      border: none;
+      padding: 12px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-bottom: 10px;
+      display: block;
+      width: 100%;
+    }
+    
+    button:hover {
+      background-color: #166FE5;
+    }
+    
+    #clearBtn {
+      background-color: #e4e6eb;
+      color: #050505;
+    }
+    
+    #clearBtn:hover {
+      background-color: #d8dadf;
+    }
+    
+    .hidden {
+      display: none !important;
+    }
+    
+    .result-box {
+      background-color: #f0f2f5;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+    
+    code {
+      background-color: #f0f2f5;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    
+    #status-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #1877F2;
+      border-radius: 50%;
+      margin-right: 8px;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
   <div class="container">
     <h1>FB Marketplace Scraper</h1>
-    <p>Click the button below or use <code>Ctrl+Shift+S</code> to capture the current listing.</p>
     
-    <button id="captureBtn">Capture Listing</button>
-    
-    <div id="status" class="hidden">
-      <div class="spinner"></div>
-      <p id="statusText">Processing...</p>
-    </div>
-    
-    <div id="result" class="hidden">
-      <p id="resultText"></p>
-      <button id="openFileBtn">Open Excel File</button>
+    <div id="main-view">
+      <p>Click the button below or use <code>Ctrl+Shift+S</code> to capture the current listing.</p>
+      
+      <button id="captureBtn">Capture Listing</button>
+      <button id="viewListingsBtn">View Saved Listings (<span id="listingCount">0</span>)</button>
+      <button id="exportBtn">Export All to Excel</button>
+      <button id="clearBtn">Clear All Listings</button>
+      
+      <div id="status" class="hidden result-box">
+        <span id="status-spinner"></span>
+        <span id="statusText">Processing...</span>
+      </div>
+      
+      <div id="result" class="hidden result-box">
+        <span id="resultText"></span>
+      </div>
     </div>
   </div>
+
   <script src="popup.js"></script>
 </body>
 </html>
