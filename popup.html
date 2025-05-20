@@ -22,6 +22,12 @@
       color: #1877F2;
     }
     
+    .subtitle {
+      font-size: 14px;
+      margin-top: -10px;
+      color: #65676B;
+    }
+    
     button {
       background-color: #1877F2;
       color: white;
@@ -84,12 +90,13 @@
 </head>
 <body>
   <div class="container">
-    <h1>FB Marketplace Scraper</h1>
+    <h1>FB Marketplace Vehicle Scraper</h1>
+    <div class="subtitle">Nova Scotia Tax Commission Tool</div>
     
     <div id="main-view">
-      <p>Click the button below or use <code>Ctrl+Shift+S</code> to capture the current listing.</p>
+      <p>Click the button below or use <code>Ctrl+Shift+S</code> to capture the current vehicle listing.</p>
       
-      <button id="captureBtn">Capture Listing</button>
+      <button id="captureBtn">Capture Vehicle Listing</button>
       <button id="viewListingsBtn">View Saved Listings (<span id="listingCount">0</span>)</button>
       <button id="exportBtn">Export All to Excel</button>
       <button id="clearBtn">Clear All Listings</button>
@@ -105,6 +112,7 @@
     </div>
   </div>
 
+  <script src="xlsx.full.min.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

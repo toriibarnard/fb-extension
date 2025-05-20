@@ -258,52 +258,12 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
         }
         
-        // Create CSV data
-        const headers = [
-          "Title", "Price", "Location", "Date Posted", "Seller Name", 
-          "Listing URL", "Date Saved", "Year", "Make", "Model"
-        ];
-        
-        const rows = [headers.join(',')];
-        
-        listings.forEach(listing => {
-          const row = [
-            escapeCsvValue(listing.title || ""),
-            escapeCsvValue(listing.price || ""),
-            escapeCsvValue(listing.location || ""),
-            escapeCsvValue(listing.datePosted || ""),
-            escapeCsvValue(listing.sellerName || ""),
-            escapeCsvValue(listing.url || ""),
-            escapeCsvValue(new Date(listing.dateSaved).toLocaleString() || ""),
-            escapeCsvValue(listing.vehicleDetails?.year || ""),
-            escapeCsvValue(listing.vehicleDetails?.make || ""),
-            escapeCsvValue(listing.vehicleDetails?.model || "")
-          ];
-          
-          rows.push(row.join(','));
-        });
-        
-        const csvContent = rows.join('\n');
-        
-        // Save CSV file
-        const blob = new Blob([csvContent], {type: 'text/csv'});
-        const url = URL.createObjectURL(blob);
-        
-        chrome.downloads.download({
-          url: url,
-          filename: 'fb-marketplace-listings.csv',
-          saveAs: false,
-          conflictAction: 'overwrite'
-        }, function(downloadId) {
-          if (chrome.runtime.lastError) {
-            console.error("Download error:", chrome.runtime.lastError);
-            showError("Failed to export: " + chrome.runtime.lastError.message);
-            return;
-          }
-          
-          // Export screenshots as well
-          exportScreenshots(listings);
-        });
+        // Use SheetJS library if available, otherwise fallback to CSV
+        if (typeof XLSX !== 'undefined') {
+          exportToExcel(listings);
+        } else {
+          exportToCsv(listings);
+        }
       };
       
       getAllRequest.onerror = function(event) {
@@ -314,6 +274,123 @@ document.addEventListener('DOMContentLoaded', function() {
       console.error("Error in exportAllListings:", error);
       showError("Error exporting listings: " + error.message);
     }
+  }
+  
+  // Export to Excel using SheetJS
+  function exportToExcel(listings) {
+    try {
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Format data for worksheet - use EXACT same columns as Python scraper
+      const wsData = [
+        ["Title", "Price", "Location", "Mileage", 
+         "Seller Name", "Listing Date", "Listing URL", "Scraped Date"]
+      ];
+      
+      // Add each listing as a row - NOT splitting title into year/make/model
+      listings.forEach(listing => {
+        const row = [
+          listing.title || "",     // Keep the full title
+          listing.price || "",     
+          listing.location || "",  
+          listing.mileage || "",   
+          listing.sellerName || "", 
+          listing.datePosted || "", 
+          listing.url || "",       
+          new Date().toLocaleString() 
+        ];
+        
+        wsData.push(row);
+      });
+      
+      // Create worksheet
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, "Vehicle Listings");
+      
+      // Generate Excel file
+      const excelData = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      
+      // Save file with timestamp in name
+      const blob = new Blob([excelData], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const url = URL.createObjectURL(blob);
+      
+      const date = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+      const filename = `nova_scotia_vehicles_${date}.xlsx`;
+      
+      chrome.downloads.download({
+        url: url,
+        filename: filename,
+        saveAs: false
+      }, function(downloadId) {
+        if (chrome.runtime.lastError) {
+          console.error("Excel download error:", chrome.runtime.lastError);
+          showError("Failed to export: " + chrome.runtime.lastError.message);
+          return;
+        }
+        
+        exportScreenshots(listings);
+        showSuccess(`Exported ${listings.length} listings to ${filename}`);
+      });
+    } catch (error) {
+      console.error("Error creating Excel file:", error);
+      // Fallback to CSV if Excel fails
+      exportToCsv(listings);
+    }
+  }
+  
+  // Export to CSV (fallback if SheetJS not available)
+  function exportToCsv(listings) {
+    // CSV headers
+    const headers = [
+      "Title", "Year", "Make", "Model", "Price", "Location", "Mileage", 
+      "Seller Name", "Listing Date", "Listing URL", "Scraped Date"
+    ];
+    
+    const rows = [headers.join(',')];
+    
+    // Add each listing as a CSV row
+    listings.forEach(listing => {
+      const row = [
+        escapeCsvValue(listing.title || ""),
+        escapeCsvValue(listing.year || ""),
+        escapeCsvValue(listing.make || ""),
+        escapeCsvValue(listing.model || ""),
+        escapeCsvValue(listing.price || ""),
+        escapeCsvValue(listing.location || ""),
+        escapeCsvValue(listing.mileage || ""),
+        escapeCsvValue(listing.sellerName || ""),
+        escapeCsvValue(listing.datePosted || ""),
+        escapeCsvValue(listing.url || ""),
+        escapeCsvValue(new Date().toLocaleString())
+      ];
+      
+      rows.push(row.join(','));
+    });
+    
+    const csvContent = rows.join('\n');
+    const blob = new Blob([csvContent], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    
+    const date = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const filename = `vehicle_listings_${date}.csv`;
+    
+    chrome.downloads.download({
+      url: url,
+      filename: filename,
+      saveAs: false
+    }, function(downloadId) {
+      if (chrome.runtime.lastError) {
+        console.error("CSV download error:", chrome.runtime.lastError);
+        showError("Failed to export: " + chrome.runtime.lastError.message);
+        return;
+      }
+      
+      exportScreenshots(listings);
+      showSuccess(`Exported ${listings.length} listings to ${filename}`);
+    });
   }
   
   // Export screenshots
@@ -449,112 +526,178 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
-// This function runs directly in the page context
+// Direct pattern matching for FB Marketplace
 function extractListingData() {
-  console.log("Starting data extraction");
+  console.log("Starting extraction with direct pattern matching");
   
-  let title = "";
-  let price = "";
-  let location = "";
-  let datePosted = "";
-  let sellerName = "";
+  // Initialize with empty values
+  const data = {
+    title: "N/A",
+    price: "N/A",
+    location: "N/A",
+    datePosted: "N/A",
+    sellerName: "N/A",
+    mileage: "N/A",
+    url: window.location.href,
+    year: "N/A"
+  };
   
-  // Try multiple approaches to extract data
+  // FIND PRICE - very specific format "CA$XXX,XXX"
+  const pricePattern = /^CA\$[\d,]+$/;
+  const priceElements = Array.from(document.querySelectorAll('*')).filter(el => {
+    const text = el.textContent.trim();
+    return pricePattern.test(text);
+  });
   
-  // 1. Extract title - try multiple selectors
-  const titleSelectors = [
-    '[data-testid="marketplace_pdp_title"]',
-    'h1',
-    'span.x1lliihq',
-    '.xzsf02u'
-  ];
-  
-  for (const selector of titleSelectors) {
-    const element = document.querySelector(selector);
-    if (element && element.textContent.trim()) {
-      title = element.textContent.trim();
-      break;
-    }
-  }
-  
-  // 2. Extract price - try multiple selectors
-  const priceSelectors = [
-    '[data-testid="marketplace_pdp_price"]',
-    'span.x193iq5w',
-    '.x1s688f'
-  ];
-  
-  for (const selector of priceSelectors) {
-    const element = document.querySelector(selector);
-    if (element && element.textContent.trim()) {
-      price = element.textContent.trim();
-      break;
-    }
-  }
-  
-  // 3. Extract location from page text
-  const allText = document.body.innerText;
-  const locationPattern = /in ([A-Za-z\s]+(?:, [A-Za-z\s]+)?)/;
-  const locationMatch = allText.match(locationPattern);
-  if (locationMatch && locationMatch[1]) {
-    location = locationMatch[1].trim();
-  }
-  
-  // 4. Look for date posted and seller name
-  const spans = document.querySelectorAll('span');
-  for (const span of spans) {
-    const text = span.textContent.trim();
+  if (priceElements.length > 0) {
+    data.price = priceElements[0].textContent.trim();
+    console.log("Found price:", data.price);
     
-    if (!datePosted && 
-        (text.includes('Posted') || text.includes('ago'))) {
-      datePosted = text;
-    }
-    
-    if (!sellerName && span.nextElementSibling) {
-      const nextText = span.nextElementSibling.textContent.trim();
-      if (text.includes('seller') || text.includes('Seller')) {
-        sellerName = nextText;
-      }
-    }
-  }
+  // FIND TITLE - find text with year pattern that's near the top
+  // Specifically find text starting with a year, as you mentioned
+  const yearPattern = /^(19|20)\d{2}\b/;
+  const titleElements = Array.from(document.querySelectorAll('h1, h2, span, div')).filter(el => {
+    const text = el.textContent.trim();
+    return yearPattern.test(text) && 
+           text.length > 5 && 
+           text.length < 100 &&
+           !text.includes("Listed") &&
+           !text.includes("Marketplace");
+  });
   
-  // 5. Extract vehicle details from title
-  let vehicleDetails = {};
-  if (title) {
-    // Look for year (19xx or 20xx)
-    const yearPattern = /\b(19|20)\d{2}\b/;
-    const yearMatch = title.match(yearPattern);
+  if (titleElements.length > 0) {
+    data.title = titleElements[0].textContent.trim();
+    console.log("Found title (starting with year):", data.title);
+    
+    // Extract year if present (for internal use only)
+    const yearMatch = data.title.match(/\b(19|20)\d{2}\b/);
     if (yearMatch) {
-      vehicleDetails.year = yearMatch[0];
-      
-      // Common car makes
-      const makes = ["Toyota", "Honda", "Ford", "Chevrolet", "Chevy", "BMW", 
-                     "Mercedes", "Audi", "Nissan", "Hyundai", "Kia", "Mazda", 
-                     "Subaru", "Volkswagen", "VW", "Lexus", "Acura"];
-      
-      for (const make of makes) {
-        if (title.includes(make)) {
-          vehicleDetails.make = make;
-          
-          // Simple model extraction (everything after make until next space)
-          const makeIndex = title.indexOf(make) + make.length;
-          const afterMake = title.substring(makeIndex).trim();
-          const modelMatch = afterMake.match(/^([a-zA-Z0-9]+)/);
-          if (modelMatch) {
-            vehicleDetails.model = modelMatch[1];
-          }
-          break;
+      data.year = yearMatch[0];
+    }
+  } else {
+    // Try alternate approach: Larger font size elements near the top
+    const allElements = Array.from(document.querySelectorAll('*'));
+    let largestFontSize = 0;
+    let bestTitleCandidate = null;
+    
+    for (const el of allElements) {
+      const text = el.textContent.trim();
+      if (text.length > 5 && 
+          text.length < 100 && 
+          !text.includes("Marketplace") &&
+          !text.includes("Facebook") &&
+          !text.includes("Listed") &&
+          !text.includes("Message")) {
+        
+        const style = window.getComputedStyle(el);
+        const fontSize = parseInt(style.fontSize || '0');
+        
+        if (fontSize > largestFontSize) {
+          largestFontSize = fontSize;
+          bestTitleCandidate = el;
         }
       }
     }
+    
+    if (bestTitleCandidate) {
+      data.title = bestTitleCandidate.textContent.trim();
+      console.log("Found title (by font size):", data.title);
+    }
+  }
   }
   
-  return {
-    title,
-    price,
-    location,
-    datePosted,
-    sellerName,
-    vehicleDetails
-  };
+  // FIND LOCATION - "city, province" where province is NS, NB, or PE
+  const locationPattern = /[A-Za-z\s-]+,\s*(NS|NB|PE)$/;
+  const locationElements = Array.from(document.querySelectorAll('*')).filter(el => {
+    const text = el.textContent.trim();
+    return locationPattern.test(text) && 
+           text.length < 50 && 
+           !text.includes("Listed") && 
+           !text.includes("Filter");
+  });
+  
+  if (locationElements.length > 0) {
+    data.location = locationElements[0].textContent.trim();
+    console.log("Found location:", data.location);
+  }
+  
+  // FIND LISTING DATE - between "Listed" and "in"
+  const dateElements = Array.from(document.querySelectorAll('*')).filter(el => {
+    const text = el.textContent.trim();
+    return text.includes("Listed") && 
+           text.includes(" in ") && 
+           text.length < 100;
+  });
+  
+  if (dateElements.length > 0) {
+    const fullText = dateElements[0].textContent.trim();
+    const match = fullText.match(/Listed\s+(.*?)\s+in/i);
+    if (match && match[1]) {
+      data.datePosted = match[1].trim();
+      console.log("Found date (between 'Listed' and 'in'):", data.datePosted);
+    }
+  }
+  
+  // FIND MILEAGE - always "Driven xxx,xxx km"
+  const mileagePattern = /^Driven\s+[\d,]+\s+km$/;
+  const mileageElements = Array.from(document.querySelectorAll('*')).filter(el => {
+    const text = el.textContent.trim();
+    return text.startsWith("Driven ") && 
+           text.endsWith(" km") && 
+           text.length < 50;
+  });
+  
+  if (mileageElements.length > 0) {
+    data.mileage = mileageElements[0].textContent.trim();
+    console.log("Found mileage:", data.mileage);
+  }
+  
+  // FIND SELLER NAME - better approach looking for text between "Seller details" and "Joined Facebook"
+  // Collect all text from elements on the page
+  const allElements = document.querySelectorAll('*');
+  let sellerSection = false;
+  let joinedSection = false;
+  
+  // Find text between "Seller details" and "Joined Facebook"
+  for (const el of allElements) {
+    const text = el.textContent.trim();
+    
+    // Skip if the element is empty or too long
+    if (!text || text.length > 100) continue;
+    
+    if (text === "Seller details" || text === "Seller information") {
+      sellerSection = true;
+      continue;
+    }
+    
+    if (text.includes("Joined Facebook")) {
+      joinedSection = true;
+      break;
+    }
+    
+    // If we're between Seller details and Joined Facebook
+    if (sellerSection && !joinedSection && text.length > 1) {
+      // Skip common non-name texts
+      if (text === "Seller details" || 
+          text === "Seller information" || 
+          text.includes("Joined") ||
+          text.includes("Message") ||
+          text.includes("is this still") ||
+          text.includes("available")) {
+        continue;
+      }
+      
+      // Names are usually 2+ characters, with no special symbols
+      if (text.length > 2 && 
+          text.length < 50 && 
+          /^[A-Za-z\s\.\-']+$/.test(text)) {
+        data.sellerName = text;
+        console.log("Found seller name:", data.sellerName);
+        break;
+      }
+    }
+  }
+  
+  console.log("Final extracted data:", data);
+  return data;
 }
