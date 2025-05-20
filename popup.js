@@ -613,176 +613,312 @@ function extractListingData() {
     }
   }
   
-  // FIND PRICE - using contextual proximity to title
+  // NEW APPROACH FOR PRICE - focus on the visible viewport
+  // The visible listing will be in the main part of the viewport
+  const pricePattern = /^CA\$[\d,]+$/;
   let foundPrice = false;
   
-  // First attempt: Use visual proximity and specific format
-  const pricePattern = /^CA\$[\d,]+$/;
+  console.log("Using viewport-based approach for price");
   
-  if (titleElement) {
-    // Try to find price near the title in the DOM
-    // First look for nearby siblings and parents/children
-    const titleParent = titleElement.parentElement;
-    const nearTitleElements = [];
-    
-    // Add siblings and their children to check
-    if (titleParent) {
-      // Look at parent's children (siblings of title element)
-      Array.from(titleParent.children).forEach(sibling => {
-        nearTitleElements.push(sibling);
-        // Also add their children
-        Array.from(sibling.querySelectorAll('*')).forEach(child => {
-          nearTitleElements.push(child);
-        });
-      });
+  // Get the viewport dimensions
+  const viewportHeight = window.innerHeight;
+  const viewportWidth = window.innerWidth;
+  
+  // Define the "main content area" where the current listing likely appears
+  // Usually in the center portion of the screen, not at the edges
+  const mainContentArea = {
+    top: viewportHeight * 0.1,     // 10% from top
+    bottom: viewportHeight * 0.7,  // 70% from top
+    left: viewportWidth * 0.2,     // 20% from left
+    right: viewportWidth * 0.8     // 80% from left
+  };
+  
+  console.log("Main content area:", mainContentArea);
+  
+  // Get all price elements and check their position in the viewport
+  const allPriceElements = [];
+  document.querySelectorAll('*').forEach(el => {
+    const text = el.textContent.trim();
+    if (pricePattern.test(text)) {
+      const rect = el.getBoundingClientRect();
+      // Check if the element is in the main content area
+      const inMainContent = (
+        rect.top >= mainContentArea.top &&
+        rect.bottom <= mainContentArea.bottom &&
+        rect.left >= mainContentArea.left &&
+        rect.right <= mainContentArea.right
+      );
       
-      // Look at parent's siblings
-      if (titleParent.parentElement) {
-        Array.from(titleParent.parentElement.children).forEach(parentSibling => {
-          nearTitleElements.push(parentSibling);
-        });
+      allPriceElements.push({
+        element: el,
+        text: text,
+        rect: rect,
+        fontSize: parseInt(window.getComputedStyle(el).fontSize || '0'),
+        inMainContent: inMainContent
+      });
+    }
+  });
+  
+  console.log("Found " + allPriceElements.length + " price elements");
+  
+  // First priority: Price elements in the main content area with larger font
+  const mainContentPrices = allPriceElements
+    .filter(item => item.inMainContent)
+    .sort((a, b) => b.fontSize - a.fontSize); // Sort by font size
+  
+  if (mainContentPrices.length > 0) {
+    data.price = mainContentPrices[0].text;
+    console.log("Found price in main content area:", data.price);
+    foundPrice = true;
+  }
+  
+  // Second priority: If we have the title, find prices near the title in the DOM
+  if (!foundPrice && titleElement) {
+    // Get all ancestors up to 3 levels
+    const ancestors = [];
+    let current = titleElement.parentElement;
+    for (let i = 0; i < 3; i++) {
+      if (!current) break;
+      ancestors.push(current);
+      current = current.parentElement;
+    }
+    
+    // Check if any price elements are descendants of these ancestors
+    for (const ancestor of ancestors) {
+      if (foundPrice) break;
+      
+      // For each price element, check if it's a descendant of this ancestor
+      for (const priceItem of allPriceElements) {
+        let el = priceItem.element;
+        while (el) {
+          if (el === ancestor) {
+            data.price = priceItem.text;
+            console.log("Found price in same section as title:", data.price);
+            foundPrice = true;
+            break;
+          }
+          el = el.parentElement;
+        }
+        if (foundPrice) break;
       }
     }
+  }
+  
+  // Third priority: Use the largest, most visible price on screen
+  if (!foundPrice) {
+    // Calculate visibility score based on size and position
+    const scoredPrices = allPriceElements.map(item => {
+      // Center of the viewport has higher score
+      const centerX = viewportWidth / 2;
+      const centerY = viewportHeight / 2;
+      const elementCenterX = item.rect.left + (item.rect.width / 2);
+      const elementCenterY = item.rect.top + (item.rect.height / 2);
+      
+      // Distance from center (normalized)
+      const distanceFromCenter = Math.sqrt(
+        Math.pow(elementCenterX - centerX, 2) + 
+        Math.pow(elementCenterY - centerY, 2)
+      ) / Math.sqrt(Math.pow(viewportWidth, 2) + Math.pow(viewportHeight, 2));
+      
+      // Font size score (larger is better)
+      const fontSizeScore = item.fontSize / 24; // normalize against typical h1 size
+      
+      // Combine scores - prioritize visible, large text
+      const visibilityScore = fontSizeScore * (1 - distanceFromCenter);
+      
+      return {
+        ...item,
+        score: visibilityScore
+      };
+    }).sort((a, b) => b.score - a.score); // Sort by score
     
-    // Filter and look for price pattern among nearby elements
-    const nearbyPriceElements = Array.from(nearTitleElements)
-      .filter(el => {
-        const text = el.textContent.trim();
-        return pricePattern.test(text);
-      })
-      .map(el => ({ element: el, text: el.textContent.trim() }));
-    
-    if (nearbyPriceElements.length > 0) {
-      data.price = nearbyPriceElements[0].text;
-      console.log("Found price near title:", data.price);
+    if (scoredPrices.length > 0) {
+      data.price = scoredPrices[0].text;
+      console.log("Found price with highest visibility score:", data.price);
       foundPrice = true;
     }
   }
   
-  // Second attempt: Look for largest font size price on page
-  if (!foundPrice) {
-    const priceElements = allTextElements
-      .filter(item => pricePattern.test(item.text))
-      .sort((a, b) => b.fontSize - a.fontSize); // Sort by font size descending
-    
-    if (priceElements.length > 0) {
-      data.price = priceElements[0].text;
-      console.log("Found price by font size:", data.price);
-      foundPrice = true;
-    }
+  // Fallback to any price element if we still haven't found one
+  if (!foundPrice && allPriceElements.length > 0) {
+    data.price = allPriceElements[0].text;
+    console.log("Using fallback price:", data.price);
   }
   
-  // Third attempt: Regular search with specific conditions
-  if (!foundPrice) {
-    // Additional filtering - prices are usually displayed prominently
-    const priceElements = allTextElements.filter(item => 
-      pricePattern.test(item.text) && 
-      item.fontSize >= 16 && // Larger font sizes for main listing
-      item.element.getBoundingClientRect().top < window.innerHeight/2 // In the top half of the page
-    );
-    
-    if (priceElements.length > 0) {
-      data.price = priceElements[0].text;
-      console.log("Found price with additional filtering:", data.price);
-    }
-  }
-  
-  // FIND LOCATION - using contextual proximity
-  // Pattern 1: "city, province" where province is a code
+  // NEW APPROACH FOR LOCATION - using viewport and additional signals
   const maritimeLocationPattern = /[A-Za-z\s-]+,\s*(NS|NB|PE|NL|ON|QC|MB|SK|AB|BC|YT|NT|NU)$/;
-  // Pattern 2: Distance format "X km away" or similar
   const distancePattern = /(km|miles|minutes|hours)\s+away/;
-  
   let foundLocation = false;
   
-  // First attempt: Look near the title or price element
-  if (titleElement || (data.price !== "N/A")) {
-    // Get contextual elements
-    const contextElement = titleElement || 
-                           allTextElements.find(item => item.text === data.price)?.element;
+  console.log("Using viewport-based approach for location");
+  
+  // Get the viewport dimensions (already defined in price section)
+
+  // Use the same main content area definition as for price
+  
+  // Collect all potential location elements with their position
+  const allLocationElements = [];
+  
+  document.querySelectorAll('*').forEach(el => {
+    const text = el.textContent.trim();
     
-    if (contextElement) {
-      // Use similar approach as with price
-      const nearbyElements = [];
-      
-      // Navigate DOM to find nearby elements
-      const contextParent = contextElement.parentElement;
-      if (contextParent) {
-        // Look at parent's children (siblings of context element)
-        Array.from(contextParent.children).forEach(sibling => {
-          nearbyElements.push(sibling);
-          // Also check their children
-          Array.from(sibling.querySelectorAll('*')).forEach(child => {
-            nearbyElements.push(child);
-          });
-        });
-        
-        // Look at parent itself and its siblings
-        nearbyElements.push(contextParent);
-        if (contextParent.parentElement) {
-          Array.from(contextParent.parentElement.children).forEach(parentSibling => {
-            nearbyElements.push(parentSibling);
-            // Check children of parent's siblings too
-            Array.from(parentSibling.querySelectorAll('*')).forEach(child => {
-              nearbyElements.push(child);
-            });
-          });
-        }
-      }
-      
-      // Find location pattern among nearby elements
-      for (const element of nearbyElements) {
-        const text = element.textContent.trim();
-        if ((maritimeLocationPattern.test(text) || distancePattern.test(text)) && 
-            text.length < 50 && 
-            !text.includes("Listed") && 
-            !text.includes("Filter")) {
-          
-          data.location = text;
-          console.log("Found location near title/price:", data.location);
-          foundLocation = true;
-          break;
-        }
-      }
+    // Skip if element doesn't match our patterns or contains excluded words
+    if (!(maritimeLocationPattern.test(text) || distancePattern.test(text)) || 
+        text.includes("Listed") || 
+        text.includes("Filter") || 
+        text.length > 50) {
+      return;
     }
+    
+    const rect = el.getBoundingClientRect();
+    
+    // Check if element is in the main content area
+    const inMainContent = (
+      rect.top >= mainContentArea.top &&
+      rect.bottom <= mainContentArea.bottom &&
+      rect.left >= mainContentArea.left &&
+      rect.right <= mainContentArea.right
+    );
+    
+    // Check if element is near any identified elements from the current listing
+    let nearIdentifiedElement = false;
+    
+    // If we've found the price, check if this location is near it
+    if (data.price !== "N/A") {
+      // Find the price element in the DOM
+      document.querySelectorAll('*').forEach(priceEl => {
+        if (priceEl.textContent.trim() === data.price) {
+          // Check if the location is within 100px of the price
+          const priceRect = priceEl.getBoundingClientRect();
+          const distance = Math.sqrt(
+            Math.pow((rect.left + rect.width/2) - (priceRect.left + priceRect.width/2), 2) +
+            Math.pow((rect.top + rect.height/2) - (priceRect.top + priceRect.height/2), 2)
+          );
+          
+          if (distance < 200) { // Within 200px
+            nearIdentifiedElement = true;
+          }
+        }
+      });
+    }
+    
+    // If we've found the mileage, check if this location is near it
+    if (!nearIdentifiedElement && data.mileage !== "N/A") {
+      document.querySelectorAll('*').forEach(mileageEl => {
+        if (mileageEl.textContent.trim() === data.mileage) {
+          // Locations are often near mileage in FB Marketplace
+          const mileageRect = mileageEl.getBoundingClientRect();
+          const distance = Math.sqrt(
+            Math.pow((rect.left + rect.width/2) - (mileageRect.left + mileageRect.width/2), 2) +
+            Math.pow((rect.top + rect.height/2) - (mileageRect.top + mileageRect.height/2), 2)
+          );
+          
+          if (distance < 300) { // Within 300px
+            nearIdentifiedElement = true;
+          }
+        }
+      });
+    }
+    
+    // Add to our collection
+    allLocationElements.push({
+      element: el,
+      text: text,
+      rect: rect,
+      inMainContent: inMainContent,
+      nearIdentifiedElement: nearIdentifiedElement,
+      fontSize: parseInt(window.getComputedStyle(el).fontSize || '0')
+    });
+  });
+  
+  console.log("Found " + allLocationElements.length + " potential location elements");
+  
+  // First priority: Location elements that are near other identified elements
+  const nearIdentifiedLocations = allLocationElements.filter(item => item.nearIdentifiedElement);
+  if (nearIdentifiedLocations.length > 0) {
+    data.location = nearIdentifiedLocations[0].text;
+    console.log("Found location near price or mileage:", data.location);
+    foundLocation = true;
   }
   
-  // Second attempt: Look for elements in the top part of the page with location patterns
+  // Second priority: Location elements in the main content area
   if (!foundLocation) {
-    // Get positions for all potential location elements
-    const potentialLocationElements = allTextElements
-      .filter(item => 
-        (maritimeLocationPattern.test(item.text) || distancePattern.test(item.text)) && 
-        item.text.length < 50 && 
-        !item.text.includes("Listed") && 
-        !item.text.includes("Filter"))
-      .map(item => ({
-        ...item,
-        position: item.element.getBoundingClientRect().top
-      }))
-      .sort((a, b) => a.position - b.position); // Sort by vertical position (top to bottom)
+    const mainContentLocations = allLocationElements
+      .filter(item => item.inMainContent)
+      .sort((a, b) => b.fontSize - a.fontSize); // Prioritize by font size
     
-    // Take the top-most location element - more likely to be the main listing
-    if (potentialLocationElements.length > 0) {
-      data.location = potentialLocationElements[0].text;
-      console.log("Found location by vertical position:", data.location);
+    if (mainContentLocations.length > 0) {
+      data.location = mainContentLocations[0].text;
+      console.log("Found location in main content area:", data.location);
       foundLocation = true;
     }
   }
   
-  // Third attempt: Regular pattern matching (original approach)
-  if (!foundLocation) {
-    const locationElements = allTextElements.filter(item => 
-      (maritimeLocationPattern.test(item.text) || distancePattern.test(item.text)) && 
-      item.text.length < 50 && 
-      !item.text.includes("Listed") && 
-      !item.text.includes("Filter")
-    );
-    
-    if (locationElements.length > 0) {
-      data.location = locationElements[0].text;
-      console.log("Found location with basic pattern matching:", data.location);
+  // Third priority: If we have title, check if any location is in the same section
+  if (!foundLocation && titleElement) {
+    // Get all ancestors up to 3 levels
+    const ancestors = [];
+    let current = titleElement.parentElement;
+    for (let i = 0; i < 5; i++) { // Check more levels than price
+      if (!current) break;
+      ancestors.push(current);
+      current = current.parentElement;
     }
+    
+    // Check if any location elements are descendants of these ancestors
+    for (const ancestor of ancestors) {
+      if (foundLocation) break;
+      
+      // For each location element, check if it's a descendant of this ancestor
+      for (const locItem of allLocationElements) {
+        let el = locItem.element;
+        while (el) {
+          if (el === ancestor) {
+            data.location = locItem.text;
+            console.log("Found location in same section as title:", data.location);
+            foundLocation = true;
+            break;
+          }
+          el = el.parentElement;
+        }
+        if (foundLocation) break;
+      }
+    }
+  }
+  
+  // Fourth priority: Calculate visibility score as with price
+  if (!foundLocation && allLocationElements.length > 0) {
+    const scoredLocations = allLocationElements.map(item => {
+      // Center of the viewport has higher score
+      const centerX = viewportWidth / 2;
+      const centerY = viewportHeight / 2;
+      const elementCenterX = item.rect.left + (item.rect.width / 2);
+      const elementCenterY = item.rect.top + (item.rect.height / 2);
+      
+      // Distance from center (normalized)
+      const distanceFromCenter = Math.sqrt(
+        Math.pow(elementCenterX - centerX, 2) + 
+        Math.pow(elementCenterY - centerY, 2)
+      ) / Math.sqrt(Math.pow(viewportWidth, 2) + Math.pow(viewportHeight, 2));
+      
+      // Prioritize elements in the top half of the page
+      const topHalfBonus = item.rect.top < (viewportHeight / 2) ? 1.5 : 1.0;
+      
+      // Font size score
+      const fontSizeScore = item.fontSize / 16; // normalize
+      
+      // Combine scores
+      const visibilityScore = fontSizeScore * (1 - distanceFromCenter) * topHalfBonus;
+      
+      return {
+        ...item,
+        score: visibilityScore
+      };
+    }).sort((a, b) => b.score - a.score); // Sort by score
+    
+    data.location = scoredLocations[0].text;
+    console.log("Found location with highest visibility score:", data.location);
+    foundLocation = true;
   }
   
   // FIND LISTING DATE - multiple patterns
