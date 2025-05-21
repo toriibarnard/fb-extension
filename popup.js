@@ -110,6 +110,9 @@ document.addEventListener('DOMContentLoaded', function() {
       const tabId = tabs[0].id;
       const url = tabs[0].url;
       
+      // Generate a listing ID that will be used for both database and screenshot filename
+      const listingId = generateListingId(url);
+      
       // First inject common.js which has our shared functions
       chrome.scripting.executeScript({
         target: {tabId: tabId},
@@ -141,7 +144,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const listingData = results[0].result;
           listingData.url = url;
           listingData.dateSaved = new Date().toISOString();
-          listingData.id = 'listing_' + Date.now();
+          listingData.id = listingId;  // Use our generated ID
           
           console.log("Data extracted:", listingData);
           showStatus('Taking screenshot...');
@@ -164,6 +167,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       });
     });
+  }
+  
+  // Generate a consistent listing ID that can be used to match Excel entries with screenshots
+  function generateListingId(url) {
+    // Try to extract the Facebook item ID from the URL if possible
+    const fbItemMatch = url.match(/\/item\/(\d+)/);
+    const fbItemId = fbItemMatch ? fbItemMatch[1] : '';
+    
+    // Use the current timestamp for uniqueness
+    const timestamp = Date.now();
+    
+    // Create an ID format that's both unique and meaningful
+    // Format: FB-{last 6 digits of FB item ID if available}-{timestamp}
+    const shortFbId = fbItemId.length > 6 ? fbItemId.slice(-6) : fbItemId;
+    const listingId = `FB-${shortFbId}-${timestamp}`;
+    
+    return listingId;
   }
   
   // Save listing to IndexedDB
@@ -229,6 +249,7 @@ document.addEventListener('DOMContentLoaded', function() {
         listings.forEach((listing, index) => {
           listingInfo += `${index + 1}. ${listing.title || 'Untitled'}\n`;
           listingInfo += `   Price: ${listing.price || 'N/A'}\n`;
+          listingInfo += `   Listing ID: ${listing.id}\n`;
           listingInfo += `   Saved: ${new Date(listing.dateSaved).toLocaleString()}\n\n`;
         });
         
@@ -294,23 +315,24 @@ document.addEventListener('DOMContentLoaded', function() {
       // Create workbook
       const wb = XLSX.utils.book_new();
       
-      // Format data for worksheet - use EXACT same columns as Python scraper
+      // Format data for worksheet - include Listing ID column
       const wsData = [
-        ["Title", "Price", "Location", "Mileage", 
+        ["Listing ID", "Title", "Price", "Location", "Mileage", 
          "Seller Name", "Listing Date", "Listing URL", "Scraped Date"]
       ];
       
-      // Add each listing as a row - NOT splitting title into year/make/model
+      // Add each listing as a row - including the Listing ID
       listings.forEach(listing => {
         const row = [
-          listing.title || "",     // Keep the full title
+          listing.id || "",        // Listing ID - this matches the screenshot filename
+          listing.title || "",     
           listing.price || "",     
           listing.location || "",  
           listing.mileage || "",   
           listing.sellerName || "", 
           listing.datePosted || "", 
           listing.url || "",       
-          new Date().toLocaleString() 
+          new Date(listing.dateSaved).toLocaleString() 
         ];
         
         wsData.push(row);
@@ -355,9 +377,9 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Export to CSV (fallback if SheetJS not available)
   function exportToCsv(listings) {
-    // CSV headers
+    // CSV headers - include Listing ID
     const headers = [
-      "Title", "Year", "Make", "Model", "Price", "Location", "Mileage", 
+      "Listing ID", "Title", "Year", "Make", "Model", "Price", "Location", "Mileage", 
       "Seller Name", "Listing Date", "Listing URL", "Scraped Date"
     ];
     
@@ -366,6 +388,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add each listing as a CSV row
     listings.forEach(listing => {
       const row = [
+        escapeCsvValue(listing.id || ""),
         escapeCsvValue(listing.title || ""),
         escapeCsvValue(listing.year || ""),
         escapeCsvValue(listing.make || ""),
@@ -376,7 +399,7 @@ document.addEventListener('DOMContentLoaded', function() {
         escapeCsvValue(listing.sellerName || ""),
         escapeCsvValue(listing.datePosted || ""),
         escapeCsvValue(listing.url || ""),
-        escapeCsvValue(new Date().toLocaleString())
+        escapeCsvValue(new Date(listing.dateSaved).toLocaleString())
       ];
       
       rows.push(row.join(','));
@@ -422,8 +445,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (screenshot && screenshot.data) {
           toExport++;
           
-          const baseFilename = sanitizeFilename(listing.title || listing.id);
-          const screenshotFilename = `${screenshotDir}/${baseFilename}.png`;
+          // Use the Listing ID as the filename for easy matching with Excel data
+          const screenshotFilename = `${screenshotDir}/${listing.id}.png`;
           
           // Convert data URL to blob and download
           fetch(screenshot.data)
@@ -495,7 +518,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
   
-  // Helper function to sanitize filenames
+  // Helper function to sanitize filenames - not needed for listing IDs
   function sanitizeFilename(filename) {
     return String(filename)
       .replace(/[/\\?%*:|"<>]/g, '-') // Replace invalid filename characters

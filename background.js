@@ -27,6 +27,9 @@ function captureAndClose() {
       return;
     }
     
+    // Generate a listing ID that will be used for both database and screenshot filename
+    const listingId = generateListingId(url);
+    
     // Show notification that we're starting to extract data
     showNotification("Facebook Marketplace Scraper", "Extracting listing data...");
     
@@ -71,7 +74,7 @@ function captureAndClose() {
           const listingData = results[0].result;
           listingData.url = url;
           listingData.dateSaved = new Date().toISOString();
-          listingData.id = 'listing_' + Date.now();
+          listingData.id = listingId;  // Use our generated ID
           
           console.log("Data extracted:", listingData);
           
@@ -90,6 +93,23 @@ function captureAndClose() {
       });
     });
   });
+}
+
+// Generate a consistent listing ID that can be used to match Excel entries with screenshots
+function generateListingId(url) {
+  // Try to extract the Facebook item ID from the URL if possible
+  const fbItemMatch = url.match(/\/item\/(\d+)/);
+  const fbItemId = fbItemMatch ? fbItemMatch[1] : '';
+  
+  // Use the current timestamp for uniqueness
+  const timestamp = Date.now();
+  
+  // Create an ID format that's both unique and meaningful
+  // Format: FB-{last 6 digits of FB item ID if available}-{timestamp}
+  const shortFbId = fbItemId.length > 6 ? fbItemId.slice(-6) : fbItemId;
+  const listingId = `FB-${shortFbId}-${timestamp}`;
+  
+  return listingId;
 }
 
 // Function to close the current listing
@@ -166,7 +186,7 @@ function saveListing(listingData, screenshotDataUrl, callback) {
       transaction.oncomplete = function() {
         console.log("Listing saved successfully");
         updateBadge();
-        showNotification("Success", "Listing saved successfully!");
+        showNotification("Success", `Listing saved successfully! ID: ${listingData.id}`);
         
         // Call the callback function if provided (to close the listing)
         if (callback) callback();
