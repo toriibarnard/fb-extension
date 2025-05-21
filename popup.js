@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Format data for worksheet - include Listing ID column
       const wsData = [
         ["Listing ID", "Title", "Price", "Location", "Mileage", 
-         "Seller Name", "Listing Date", "Listing URL", "Scraped Date"]
+        "Seller Name", "Listing Date", "Listing URL", "Scraped Date"]
       ];
       
       // Add each listing as a row - including the Listing ID
@@ -352,7 +352,14 @@ document.addEventListener('DOMContentLoaded', function() {
       const url = URL.createObjectURL(blob);
       
       const date = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-      const filename = `nova_scotia_vehicles_${date}.xlsx`;
+      
+      // Create a main folder for all Facebook Marketplace data
+      const mainFolder = 'Facebook Marketplace';
+      // Create a subfolder for data exports with today's date
+      const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      const dataDir = `${mainFolder}/data/${today}`;
+      
+      const filename = `${dataDir}/nova_scotia_vehicles_${date}.xlsx`;
       
       chrome.downloads.download({
         url: url,
@@ -374,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
       exportToCsv(listings);
     }
   }
-  
+
   // Export to CSV (fallback if SheetJS not available)
   function exportToCsv(listings) {
     // CSV headers - include Listing ID
@@ -410,7 +417,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const url = URL.createObjectURL(blob);
     
     const date = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-    const filename = `vehicle_listings_${date}.csv`;
+    
+    // Create a main folder for all Facebook Marketplace data
+    const mainFolder = 'Facebook Marketplace';
+    // Create a subfolder for data exports with today's date
+    const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    const dataDir = `${mainFolder}/data/${today}`;
+    
+    const filename = `${dataDir}/vehicle_listings_${date}.csv`;
     
     chrome.downloads.download({
       url: url,
@@ -430,7 +444,12 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Export screenshots
   function exportScreenshots(listings) {
-    const screenshotDir = 'fb-marketplace-screenshots';
+    // Create a main folder for all Facebook Marketplace data
+    const mainFolder = 'Facebook Marketplace';
+    // Create a subfolder for screenshots with today's date
+    const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    const screenshotDir = `${mainFolder}/screenshots/${today}`;
+    
     let exported = 0;
     let toExport = 0;
     
@@ -481,7 +500,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function checkIfDone() {
       if (exported === toExport) {
-        showSuccess(`Export complete! Saved ${listings.length} listings and ${exported} screenshots.`);
+        showSuccess(`Export complete! Saved ${listings.length} listings and ${exported} screenshots to ${screenshotDir} folder.`);
       }
     }
   }

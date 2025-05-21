@@ -136,6 +136,41 @@ function closeCurrentListing(tabId) {
   });
 }
 
+// Function to save a screenshot directly to the organized folder
+function saveScreenshotToFolder(screenshotDataUrl, listingId) {
+  // Create a main folder for all Facebook Marketplace data
+  const mainFolder = 'Facebook Marketplace';
+  // Create a subfolder for screenshots with today's date
+  const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+  const screenshotDir = `${mainFolder}/screenshots/${today}`;
+  
+  // Use the Listing ID as the filename for easy matching with Excel data
+  const screenshotFilename = `${screenshotDir}/${listingId}.png`;
+  
+  // Convert data URL to blob and download
+  fetch(screenshotDataUrl)
+    .then(res => res.blob())
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      chrome.downloads.download({
+        url: url,
+        filename: screenshotFilename,
+        saveAs: false,
+        conflictAction: 'overwrite'
+      }, function(downloadId) {
+        if (chrome.runtime.lastError) {
+          console.error("Screenshot download error:", chrome.runtime.lastError);
+          return;
+        }
+        console.log(`Screenshot saved to ${screenshotFilename}`);
+      });
+    })
+    .catch(err => {
+      console.error("Error saving screenshot:", err);
+    });
+}
+
+
 // Save listing to IndexedDB
 function saveListing(listingData, screenshotDataUrl, callback) {
   console.log("Saving listing to database");
@@ -237,3 +272,4 @@ function updateBadge() {
     }
   };
 }
+
