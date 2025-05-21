@@ -9,11 +9,15 @@
     "storage",
     "downloads",
     "downloads.open",
-    "tabs"
+    "tabs",
+    "notifications"
   ],
   "host_permissions": [
     "https://*.facebook.com/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -25,7 +29,8 @@
   "commands": {
     "capture-listing": {
       "suggested_key": {
-        "default": "Ctrl+Shift+S"
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
       },
       "description": "Capture the current marketplace listing"
     }
