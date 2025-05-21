@@ -37,7 +37,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/*"],
+      "resources": ["icons/*", "navigation.js", "common.js"],
       "matches": ["https://*.facebook.com/*"]
     }
   ],

@@ -4,12 +4,12 @@
 chrome.commands.onCommand.addListener((command) => {
   if (command === "capture-listing") {
     console.log("Keyboard shortcut captured: Ctrl+Shift+S / Cmd+Shift+S");
-    captureCurrentListing();
+    captureAndClose();
   }
 });
 
-// Capture the current listing when triggered by keyboard shortcut
-function captureCurrentListing() {
+// Capture the current listing and then close it
+function captureAndClose() {
   // Check if we're on a Facebook Marketplace page
   chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
     if (!tabs || tabs.length === 0) {
@@ -30,58 +30,94 @@ function captureCurrentListing() {
     // Show notification that we're starting to extract data
     showNotification("Facebook Marketplace Scraper", "Extracting listing data...");
     
-    // Extract the data from the page - using common.js's extractListingData function
+    // First, inject our navigation script
     chrome.scripting.executeScript({
       target: {tabId: tabId},
-      files: ['common.js']  // First, inject the common.js file
+      files: ['navigation.js']
     }, () => {
       if (chrome.runtime.lastError) {
-        console.error("Failed to inject common.js:", chrome.runtime.lastError);
-        showNotification("Error", "Failed to inject extraction script.");
-        return;
+        console.error("Failed to inject navigation.js:", chrome.runtime.lastError);
+        // Continue even if navigation fails, we can still capture the listing
       }
       
-      // Now execute the extraction function
+      // Next, inject the common.js file
       chrome.scripting.executeScript({
         target: {tabId: tabId},
-        function: () => extractListingData() // This will use the injected function
-      }, (results) => {
+        files: ['common.js']
+      }, () => {
         if (chrome.runtime.lastError) {
-          console.error("Script execution error:", chrome.runtime.lastError);
-          showNotification("Error", "Failed to extract data: " + chrome.runtime.lastError.message);
+          console.error("Failed to inject common.js:", chrome.runtime.lastError);
+          showNotification("Error", "Failed to inject extraction script.");
           return;
         }
         
-        if (!results || !results[0] || !results[0].result) {
-          console.error("No data extracted");
-          showNotification("Error", "Could not extract listing data. Please try again.");
-          return;
-        }
-        
-        const listingData = results[0].result;
-        listingData.url = url;
-        listingData.dateSaved = new Date().toISOString();
-        listingData.id = 'listing_' + Date.now();
-        
-        console.log("Data extracted:", listingData);
-        
-        // Take screenshot
-        chrome.tabs.captureVisibleTab({format: 'png'}, function(screenshotDataUrl) {
-          if (chrome.runtime.lastError || !screenshotDataUrl) {
-            console.log("Screenshot error, saving without image");
-            saveListing(listingData, null);
+        // Now execute the extraction function
+        chrome.scripting.executeScript({
+          target: {tabId: tabId},
+          function: () => extractListingData() // This will use the injected function
+        }, (results) => {
+          if (chrome.runtime.lastError) {
+            console.error("Script execution error:", chrome.runtime.lastError);
+            showNotification("Error", "Failed to extract data: " + chrome.runtime.lastError.message);
             return;
           }
           
-          saveListing(listingData, screenshotDataUrl);
+          if (!results || !results[0] || !results[0].result) {
+            console.error("No data extracted");
+            showNotification("Error", "Could not extract listing data. Please try again.");
+            return;
+          }
+          
+          const listingData = results[0].result;
+          listingData.url = url;
+          listingData.dateSaved = new Date().toISOString();
+          listingData.id = 'listing_' + Date.now();
+          
+          console.log("Data extracted:", listingData);
+          
+          // Take screenshot
+          chrome.tabs.captureVisibleTab({format: 'png'}, function(screenshotDataUrl) {
+            if (chrome.runtime.lastError || !screenshotDataUrl) {
+              console.log("Screenshot error, saving without image");
+              saveListing(listingData, null, () => closeCurrentListing(tabId));
+              return;
+            }
+            
+            // Save the listing data, then close the listing when done
+            saveListing(listingData, screenshotDataUrl, () => closeCurrentListing(tabId));
+          });
         });
       });
     });
   });
 }
 
+// Function to close the current listing
+function closeCurrentListing(tabId) {
+  // Execute the close function from our injected script
+  chrome.scripting.executeScript({
+    target: {tabId: tabId},
+    function: () => {
+      // This calls the function we defined in navigation.js
+      if (window.fbMarketplaceNavigation) {
+        return window.fbMarketplaceNavigation.closeCurrentListing();
+      }
+      return false;
+    }
+  }, (results) => {
+    if (chrome.runtime.lastError) {
+      console.error("Close operation error:", chrome.runtime.lastError);
+      return;
+    }
+    
+    // We don't need to show a notification for close failure
+    // as the user can still close manually if needed
+    console.log("Close operation result:", results && results[0] ? results[0].result : false);
+  });
+}
+
 // Save listing to IndexedDB
-function saveListing(listingData, screenshotDataUrl) {
+function saveListing(listingData, screenshotDataUrl, callback) {
   console.log("Saving listing to database");
   
   // Open the database
@@ -90,6 +126,7 @@ function saveListing(listingData, screenshotDataUrl) {
   request.onerror = function(event) {
     console.error("Database error:", event.target.error);
     showNotification("Error", "Failed to open database. Please check your browser settings.");
+    if (callback) callback();
   };
   
   request.onupgradeneeded = function(event) {
@@ -130,15 +167,20 @@ function saveListing(listingData, screenshotDataUrl) {
         console.log("Listing saved successfully");
         updateBadge();
         showNotification("Success", "Listing saved successfully!");
+        
+        // Call the callback function if provided (to close the listing)
+        if (callback) callback();
       };
       
       transaction.onerror = function(event) {
         console.error("Transaction error:", event.target.error);
         showNotification("Error", "Failed to save listing: " + event.target.error.message);
+        if (callback) callback();
       };
     } catch (error) {
       console.error("Error in saveListing:", error);
       showNotification("Error", "Error saving listing: " + error.message);
+      if (callback) callback();
     }
   };
 }
