@@ -42,21 +42,29 @@ Folder in your downloads folder, with the excel file and the screenshots stored 
  
  
 How to combine all excel files into one big one:
-Option 1:
+Windows:
  
-1) go to the fb-extension folder and find the "combiner.txt" file
+1) go to the fb-extension folder and find the "WindowsCombiner.txt" file
  
 2) move this file to the "Facebook Marketplace" folder in your downloads folder (make sure
 not to put it inside of the "data" or "screenshots" folder)
  
-3) rename this file to combiner.bat, make sure you are getting rid of the .txt extension.
+3) rename this file to WindowsCombiner.bat, make sure you are getting rid of the .txt extension.
 To verify this, in your file explorer, click the view tab and select the "file name extensions" checkbox.
-The file should be combiner.bat, not combiner.bat.txt
+The file should be WindowsCombiner.bat, not WindowsCombiner.bat.txt
  
 4) now whenever you double click this file, all excel files will be combined into one big one
  
-Note: it might prompt you to "run as administrator" or "run as another user". choose run as another user and
-just sign in, then try running it.
+Note: it might prompt you to "run as administrator" or "run as another user". choose run as another user and just sign in, then try running it.
+
+Mac:
+
+1) go to the fb-extension folder and find the "MacCombiner" file
+
+2) move this file to the "Facebook Marketplace" folder in your downloads folder (make sure
+not to put it inside of the "data" or "screenshots" folder).
+
+3) now whenever you double click this file, all excel files will be combined into one big one
  
  
 any questions email tor.barnard@gmail.com
