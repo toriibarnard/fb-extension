@@ -1,0 +1,82 @@
+@echo off
+title Facebook Marketplace Data Combiner
+ 
+echo.
+echo ==========================================
+echo   Facebook Marketplace Data Combiner
+echo ==========================================
+echo.
+echo This tool combines all Excel files from your
+echo daily data folders into one master file.
+echo.
+ 
+:: Check if we're in the right location
+if not exist data (
+    echo ERROR: Could not find the 'data' folder!
+    echo.
+    echo Make sure this file is placed in your main
+    echo 'Facebook Marketplace' folder, not inside
+    echo the data or screenshots folders.
+    echo.
+    echo Expected folder structure:
+    echo   Facebook Marketplace/
+    echo   ├── combine_marketplace_data.bat  ← This file
+    echo   ├── data/
+    echo   └── screenshots/
+    echo.
+    pause
+    exit /b 1
+)
+ 
+echo ✓ Found data folder
+echo.
+echo Searching for Excel files...
+ 
+:: Create timestamp for output filename
+for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
+set "YYYY=%dt:~0,4%"
+set "MM=%dt:~4,2%"
+set "DD=%dt:~6,2%"
+set "HH=%dt:~8,2%"
+set "Min=%dt:~10,2%"
+set "Sec=%dt:~12,2%"
+set "timestamp=%YYYY%-%MM%-%DD%_%HH%-%Min%-%Sec%"
+ 
+set "outputFile=MASTER_marketplace_data_%timestamp%.xlsx"
+ 
+:: Count Excel files (excluding any existing master files)
+set /a fileCount=0
+for /r data %%f in (*.xlsx) do (
+    echo %%~nf | findstr /i "MASTER" >nul
+    if errorlevel 1 (
+        set /a fileCount+=1
+    )
+)
+ 
+if %fileCount%==0 (
+    echo.
+    echo ⚠️  No Excel files found in data folders!
+    echo.
+    echo Things to check:
+    echo 1. Make sure you've exported some data from the browser extension
+    echo 2. Check that files are in data/YYYY-MM-DD/ subfolders
+    echo 3. Verify files have .xlsx extension
+    echo.
+    pause
+    exit /b 1
+)
+ 
+echo.
+echo ✓ Found %fileCount% Excel files to combine
+echo.
+echo Processing files with Excel...
+ 
+:: Use PowerShell to handle Excel files via COM automation
+powershell -ExecutionPolicy Bypass -Command "& {try {$baseDir = Get-Location; $dataDir = Join-Path $baseDir 'data'; $outputFile = Join-Path $baseDir '%outputFile%'; $excelFiles = Get-ChildItem -Path $dataDir -Recurse -Filter '*.xlsx' | Where-Object { $_.Name -notlike 'MASTER*' }; Write-Host 'Starting Excel application...' -ForegroundColor Blue; $excel = New-Object -ComObject Excel.Application; $excel.Visible = $false; $excel.DisplayAlerts = $false; $workbook = $excel.Workbooks.Add(); $worksheet = $workbook.Worksheets.Item(1); $worksheet.Name = 'All Listings'; $currentRow = 1; $headerWritten = $false; foreach ($file in $excelFiles) { Write-Host ('📄 Processing: ' + $file.Name) -ForegroundColor Cyan; try { $sourceWorkbook = $excel.Workbooks.Open($file.FullName); $sourceWorksheet = $sourceWorkbook.Worksheets.Item(1); $usedRange = $sourceWorksheet.UsedRange; if ($usedRange -and $usedRange.Rows.Count -gt 0) { if (-not $headerWritten) { $headerRange = $sourceWorksheet.Range('1:1'); $headerRange.Copy(); $worksheet.Range('A1').PasteSpecial([Microsoft.Office.Interop.Excel.XlPasteType]::xlPasteValues); $currentRow = 2; $headerWritten = $true } if ($usedRange.Rows.Count -gt 1) { $rowCount = $usedRange.Rows.Count; $dataRange = $sourceWorksheet.Range('2:' + $rowCount); $dataRange.Copy(); $pasteRange = $worksheet.Range('A' + $currentRow); $pasteRange.PasteSpecial([Microsoft.Office.Interop.Excel.XlPasteType]::xlPasteValues); $currentRow += ($rowCount - 1) } } $sourceWorkbook.Close($false) } catch { Write-Host ('⚠️  Error processing ' + $file.Name + ': ' + $_.Exception.Message) -ForegroundColor Yellow } } Write-Host 'Formatting combined data...' -ForegroundColor Blue; $worksheet.UsedRange.Columns.AutoFit() | Out-Null; Write-Host 'Saving master file...' -ForegroundColor Blue; $workbook.SaveAs($outputFile, [Microsoft.Office.Interop.Excel.XlFileFormat]::xlOpenXMLWorkbook); $totalRows = $worksheet.UsedRange.Rows.Count - 1; $workbook.Close(); $excel.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($worksheet) | Out-Null; [System.Runtime.Interopservices.Marshal]::ReleaseComObject($workbook) | Out-Null; [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null; [System.GC]::Collect(); [System.GC]::WaitForPendingFinalizers(); Write-Host ''; Write-Host '🎉 SUCCESS!' -ForegroundColor Green; Write-Host ('📁 Created: ' + (Split-Path $outputFile -Leaf)) -ForegroundColor Green; Write-Host ('📊 Combined ' + $excelFiles.Count + ' files') -ForegroundColor White; Write-Host ('📋 Total listings: ' + $totalRows) -ForegroundColor White } catch { Write-Host ('❌ Error: ' + $_.Exception.Message) -ForegroundColor Red; Write-Host ''; Write-Host 'Possible solutions:' -ForegroundColor Yellow; Write-Host '1. Make sure Excel is installed' -ForegroundColor Yellow; Write-Host '2. Close any open Excel files' -ForegroundColor Yellow; Write-Host '3. Try running as Administrator' -ForegroundColor Yellow }}"
+ 
+echo.
+echo The combined file has been saved in this folder.
+echo You can now open it in Excel to view all your listings!
+echo.
+echo Press any key to exit...
+pause >nu
