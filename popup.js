@@ -353,8 +353,9 @@ document.addEventListener('DOMContentLoaded', function() {
       
       const date = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
       
-      // Create a main folder for all Facebook Marketplace data
-      const mainFolder = 'Facebook Marketplace';
+      // Create a parent folder for all vehicle listings, then subfolder for Facebook Marketplace data
+      const parentFolder = 'Vehicle Listings';
+      const mainFolder = `${parentFolder}/Facebook Marketplace`;
       // Create a subfolder for data exports with today's date
       const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
       const dataDir = `${mainFolder}/data/${today}`;
@@ -418,8 +419,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const date = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
     
-    // Create a main folder for all Facebook Marketplace data
-    const mainFolder = 'Facebook Marketplace';
+    // Create a parent folder for all vehicle listings, then subfolder for Facebook Marketplace data
+    const parentFolder = 'Vehicle Listings';
+    const mainFolder = `${parentFolder}/Facebook Marketplace`;
     // Create a subfolder for data exports with today's date
     const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
     const dataDir = `${mainFolder}/data/${today}`;
@@ -444,8 +446,9 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Export screenshots
   function exportScreenshots(listings) {
-    // Create a main folder for all Facebook Marketplace data
-    const mainFolder = 'Facebook Marketplace';
+    // Create a parent folder for all vehicle listings, then subfolder for Facebook Marketplace data
+    const parentFolder = 'Vehicle Listings';
+    const mainFolder = `${parentFolder}/Facebook Marketplace`;
     // Create a subfolder for screenshots with today's date
     const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
     const screenshotDir = `${mainFolder}/screenshots/${today}`;

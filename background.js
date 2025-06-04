@@ -138,8 +138,9 @@ function closeCurrentListing(tabId) {
 
 // Function to save a screenshot directly to the organized folder
 function saveScreenshotToFolder(screenshotDataUrl, listingId) {
-  // Create a main folder for all Facebook Marketplace data
-  const mainFolder = 'Facebook Marketplace';
+  // Create a parent folder for all vehicle listings, then subfolder for Facebook Marketplace data
+  const parentFolder = 'Vehicle Listings';
+  const mainFolder = `${parentFolder}/Facebook Marketplace`;
   // Create a subfolder for screenshots with today's date
   const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
   const screenshotDir = `${mainFolder}/screenshots/${today}`;
