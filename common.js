@@ -1,4 +1,5 @@
 // common.js - Shared functions for both popup and background scripts
+// File location: fb-extension/common.js
 
 // Improved extractListingData function with more robust pattern matching
 function extractListingData() {
@@ -544,15 +545,26 @@ function extractListingData() {
     }
   }
   
+  // ENHANCE WITH VEHICLE PARSER
+  // Use the vehicle parser if available to improve year, make, model extraction
+  let enhancedData = data;
+  if (typeof window !== 'undefined' && window.vehicleParser) {
+    console.log("Enhancing data with vehicle parser");
+    enhancedData = window.vehicleParser.enhanceVehicleData(data);
+    console.log("Enhanced data:", enhancedData);
+  } else {
+    console.log("Vehicle parser not available, using basic extraction");
+  }
+  
   // Final data validation and cleanup
-  Object.keys(data).forEach(key => {
-    if (data[key] === "N/A" || !data[key]) {
+  Object.keys(enhancedData).forEach(key => {
+    if (enhancedData[key] === "N/A" || !enhancedData[key]) {
       console.log(`Warning: Could not find ${key}`);
     }
   });
   
-  console.log("Final extracted data:", data);
-  return data;
+  console.log("Final extracted data:", enhancedData);
+  return enhancedData;
 }
 
 // Function for database helper functions

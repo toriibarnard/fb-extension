@@ -1,4 +1,5 @@
 // background.js - Listens for keyboard shortcuts and handles background tasks
+// File location: fb-extension/background.js
 
 // Listen for the keyboard shortcut command
 chrome.commands.onCommand.addListener((command) => {
@@ -43,51 +44,62 @@ function captureAndClose() {
         // Continue even if navigation fails, we can still capture the listing
       }
       
-      // Next, inject the common.js file
+      // Next, inject the vehicle parser
       chrome.scripting.executeScript({
         target: {tabId: tabId},
-        files: ['common.js']
+        files: ['vehicle-parser.js']
       }, () => {
         if (chrome.runtime.lastError) {
-          console.error("Failed to inject common.js:", chrome.runtime.lastError);
-          showNotification("Error", "Failed to inject extraction script.");
-          return;
+          console.error("Failed to inject vehicle-parser.js:", chrome.runtime.lastError);
+          // Continue even if vehicle parser fails, we can still capture basic data
         }
         
-        // Now execute the extraction function
+        // Next, inject the common.js file
         chrome.scripting.executeScript({
           target: {tabId: tabId},
-          function: () => extractListingData() // This will use the injected function
-        }, (results) => {
+          files: ['common.js']
+        }, () => {
           if (chrome.runtime.lastError) {
-            console.error("Script execution error:", chrome.runtime.lastError);
-            showNotification("Error", "Failed to extract data: " + chrome.runtime.lastError.message);
+            console.error("Failed to inject common.js:", chrome.runtime.lastError);
+            showNotification("Error", "Failed to inject extraction script.");
             return;
           }
           
-          if (!results || !results[0] || !results[0].result) {
-            console.error("No data extracted");
-            showNotification("Error", "Could not extract listing data. Please try again.");
-            return;
-          }
-          
-          const listingData = results[0].result;
-          listingData.url = url;
-          listingData.dateSaved = new Date().toISOString();
-          listingData.id = listingId;  // Use our generated ID
-          
-          console.log("Data extracted:", listingData);
-          
-          // Take screenshot
-          chrome.tabs.captureVisibleTab({format: 'png'}, function(screenshotDataUrl) {
-            if (chrome.runtime.lastError || !screenshotDataUrl) {
-              console.log("Screenshot error, saving without image");
-              saveListing(listingData, null, () => closeCurrentListing(tabId));
+          // Now execute the extraction function
+          chrome.scripting.executeScript({
+            target: {tabId: tabId},
+            function: () => extractListingData() // This will use the injected function
+          }, (results) => {
+            if (chrome.runtime.lastError) {
+              console.error("Script execution error:", chrome.runtime.lastError);
+              showNotification("Error", "Failed to extract data: " + chrome.runtime.lastError.message);
               return;
             }
             
-            // Save the listing data, then close the listing when done
-            saveListing(listingData, screenshotDataUrl, () => closeCurrentListing(tabId));
+            if (!results || !results[0] || !results[0].result) {
+              console.error("No data extracted");
+              showNotification("Error", "Could not extract listing data. Please try again.");
+              return;
+            }
+            
+            const listingData = results[0].result;
+            listingData.url = url;
+            listingData.dateSaved = new Date().toISOString();
+            listingData.id = listingId;  // Use our generated ID
+            
+            console.log("Data extracted:", listingData);
+            
+            // Take screenshot
+            chrome.tabs.captureVisibleTab({format: 'png'}, function(screenshotDataUrl) {
+              if (chrome.runtime.lastError || !screenshotDataUrl) {
+                console.log("Screenshot error, saving without image");
+                saveListing(listingData, null, () => closeCurrentListing(tabId));
+                return;
+              }
+              
+              // Save the listing data, then close the listing when done
+              saveListing(listingData, screenshotDataUrl, () => closeCurrentListing(tabId));
+            });
           });
         });
       });
@@ -273,4 +285,3 @@ function updateBadge() {
     }
   };
 }
-

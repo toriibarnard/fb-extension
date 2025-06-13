@@ -1,4 +1,6 @@
 // popup.js - Handles popup UI and interactions
+// File location: fb-extension/popup.js
+
 document.addEventListener('DOMContentLoaded', function() {
   // UI Elements
   const captureBtn = document.getElementById('captureBtn');
@@ -113,57 +115,68 @@ document.addEventListener('DOMContentLoaded', function() {
       // Generate a listing ID that will be used for both database and screenshot filename
       const listingId = generateListingId(url);
       
-      // First inject common.js which has our shared functions
+      // First inject vehicle parser
       chrome.scripting.executeScript({
         target: {tabId: tabId},
-        files: ['common.js']
+        files: ['vehicle-parser.js']
       }, () => {
         if (chrome.runtime.lastError) {
-          console.error("Failed to inject common.js:", chrome.runtime.lastError);
-          showError("Failed to inject extraction script.");
-          return;
+          console.error("Failed to inject vehicle-parser.js:", chrome.runtime.lastError);
+          // Continue even if vehicle parser fails, we can still capture basic data
         }
         
-        // Now execute the extraction function from common.js
+        // Then inject common.js which has our shared functions
         chrome.scripting.executeScript({
           target: {tabId: tabId},
-          function: () => extractListingData() // This uses the injected function
-        }, (results) => {
+          files: ['common.js']
+        }, () => {
           if (chrome.runtime.lastError) {
-            console.error("Script execution error:", chrome.runtime.lastError);
-            showError("Error: " + chrome.runtime.lastError.message);
+            console.error("Failed to inject common.js:", chrome.runtime.lastError);
+            showError("Failed to inject extraction script.");
             return;
           }
           
-          if (!results || !results[0] || !results[0].result) {
-            console.error("No data extracted");
-            showError("Could not extract listing data. Please try again.");
-            return;
-          }
-          
-          const listingData = results[0].result;
-          listingData.url = url;
-          listingData.dateSaved = new Date().toISOString();
-          listingData.id = listingId;  // Use our generated ID
-          
-          console.log("Data extracted:", listingData);
-          showStatus('Taking screenshot...');
-          
-          // Try to capture screenshot
-          try {
-            chrome.tabs.captureVisibleTab({format: 'png'}, function(screenshotDataUrl) {
-              if (chrome.runtime.lastError || !screenshotDataUrl) {
-                console.log("Screenshot error, saving without image");
-                saveListing(listingData, null);
-                return;
-              }
-              
-              saveListing(listingData, screenshotDataUrl);
-            });
-          } catch (error) {
-            console.error("Exception during screenshot:", error);
-            saveListing(listingData, null);
-          }
+          // Now execute the extraction function from common.js
+          chrome.scripting.executeScript({
+            target: {tabId: tabId},
+            function: () => extractListingData() // This uses the injected function
+          }, (results) => {
+            if (chrome.runtime.lastError) {
+              console.error("Script execution error:", chrome.runtime.lastError);
+              showError("Error: " + chrome.runtime.lastError.message);
+              return;
+            }
+            
+            if (!results || !results[0] || !results[0].result) {
+              console.error("No data extracted");
+              showError("Could not extract listing data. Please try again.");
+              return;
+            }
+            
+            const listingData = results[0].result;
+            listingData.url = url;
+            listingData.dateSaved = new Date().toISOString();
+            listingData.id = listingId;  // Use our generated ID
+            
+            console.log("Data extracted:", listingData);
+            showStatus('Taking screenshot...');
+            
+            // Try to capture screenshot
+            try {
+              chrome.tabs.captureVisibleTab({format: 'png'}, function(screenshotDataUrl) {
+                if (chrome.runtime.lastError || !screenshotDataUrl) {
+                  console.log("Screenshot error, saving without image");
+                  saveListing(listingData, null);
+                  return;
+                }
+                
+                saveListing(listingData, screenshotDataUrl);
+              });
+            } catch (error) {
+              console.error("Exception during screenshot:", error);
+              saveListing(listingData, null);
+            }
+          });
         });
       });
     });
@@ -249,6 +262,7 @@ document.addEventListener('DOMContentLoaded', function() {
         listings.forEach((listing, index) => {
           listingInfo += `${index + 1}. ${listing.title || 'Untitled'}\n`;
           listingInfo += `   Price: ${listing.price || 'N/A'}\n`;
+          listingInfo += `   Year: ${listing.year || 'N/A'} Make: ${listing.make || 'N/A'} Model: ${listing.model || 'N/A'}\n`;
           listingInfo += `   Listing ID: ${listing.id}\n`;
           listingInfo += `   Saved: ${new Date(listing.dateSaved).toLocaleString()}\n\n`;
         });
@@ -317,7 +331,7 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Format data for worksheet - include Listing ID column
       const wsData = [
-        ["Listing ID", "Title", "Price", "Location", "Mileage", 
+        ["Listing ID", "Title", "Year", "Make", "Model", "Price", "Location", "Mileage", 
         "Seller Name", "Listing Date", "Listing URL", "Scraped Date"]
       ];
       
@@ -326,6 +340,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const row = [
           listing.id || "",        // Listing ID - this matches the screenshot filename
           listing.title || "",     
+          listing.year || "",      // Enhanced year from vehicle parser
+          listing.make || "",      // Enhanced make from vehicle parser
+          listing.model || "",     // Enhanced model from vehicle parser
           listing.price || "",     
           listing.location || "",  
           listing.mileage || "",   
